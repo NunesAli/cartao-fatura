@@ -16,6 +16,9 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <!-- PDF.js para leitura real de faturas em PDF -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <!-- Firebase SDK (Compat para funcionamento direto no navegador) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 
   <script>
     if (window.pdfjsLib) {
@@ -51,6 +54,12 @@
         <p class="text-slate-300 text-xs sm:text-sm mt-1.5 max-w-md mx-auto">
           Selecione seu perfil para consultar apenas os seus gastos, acompanhar parcelas futuras e conferir o rateio.
         </p>
+        <div class="mt-3 flex justify-center">
+          <span id="login-cloud-badge" class="inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
+            <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+            <span>Sincronizando com a nuvem...</span>
+          </span>
+        </div>
       </div>
 
       <div class="p-6 sm:p-8 space-y-6">
@@ -162,6 +171,10 @@
             <div class="flex items-center gap-2">
               <span class="font-display font-bold text-slate-900 text-base sm:text-lg tracking-tight">Cartão</span>
               <span id="header-role-badge" class="text-[11px] font-semibold px-2 py-0.5 rounded-full"></span>
+              <span id="header-cloud-badge" class="hidden sm:inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200" title="Dados sincronizados em tempo real">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                <span>Nuvem Ativa</span>
+              </span>
             </div>
             <p class="text-[11px] text-slate-500 hidden sm:block">Controle de Faturas & Divisão Transparente</p>
           </div>
@@ -907,7 +920,7 @@
         <div>
           <h3 class="font-display font-bold text-slate-900 text-base">Zerar todos os gastos?</h3>
           <p class="text-xs text-slate-500 mt-1">
-            Todos os lançamentos e marcações de pagamento serão apagados. Os perfis e PINs cadastrados serão mantidos.
+            Todos os lançamentos e marcações de pagamento serão apagados na nuvem e para todos os participantes. Os perfis e PINs cadastrados serão mantidos.
           </p>
         </div>
         <div class="flex justify-end gap-2 pt-2">
@@ -1014,9 +1027,35 @@
   </div>
 
   <!-- =========================================================
-       JAVASCRIPT: ARQUITETURA, ESTADO, PARCELAMENTOS E UI
+       JAVASCRIPT: FIREBASE FIRESTORE + ARQUITETURA + UI
   ========================================================== -->
   <script>
+    // Configuração do Projeto Firebase (cartao-fatura)
+    const firebaseConfig = {
+      apiKey: "AIzaSyDXJDVl8hgcgTEc_pQ0OgYlHYfxmtgsa-M",
+      authDomain: "cartao-fatura.firebaseapp.com",
+      projectId: "cartao-fatura",
+      storageBucket: "cartao-fatura.firebasestorage.app",
+      messagingSenderId: "752441394498",
+      appId: "1:752441394498:web:662eedfcfb560fa85774db"
+    };
+
+    let db = null;
+    let stateDocRef = null;
+    let isCloudConnected = false;
+
+    try {
+      if (window.firebase) {
+        if (!firebase.apps.length) {
+          firebase.initializeApp(firebaseConfig);
+        }
+        db = firebase.firestore();
+        stateDocRef = db.collection('cartao_app').doc('estado_principal');
+      }
+    } catch (e) {
+      console.error('Erro ao inicializar Firebase:', e);
+    }
+
     const COLOR_PALETTES = {
       emerald: { bg: 'bg-emerald-100', text: 'text-emerald-800', border: 'border-emerald-300', hex: '#10B981' },
       indigo:  { bg: 'bg-indigo-100',  text: 'text-indigo-800',  border: 'border-indigo-300',  hex: '#6366F1' },
@@ -1149,38 +1188,64 @@
     }
 
     // ---------------------------------------------------------
-    // PERSISTÊNCIA E INICIALIZAÇÃO
+    // PERSISTÊNCIA LOCAL + FIREBASE FIRESTORE (TEMPO REAL)
     // ---------------------------------------------------------
-    function loadAllData() {
+    function mergeUsersWithDefaults(rawUsers) {
+      if (!Array.isArray(rawUsers) || rawUsers.length === 0) {
+        return DEFAULT_USERS.map(u => ({ ...u }));
+      }
+      const merged = rawUsers
+        .filter(u => u.id !== 'agregado_rafa')
+        .map(u => {
+          const def = DEFAULT_USERS.find(d => d.id === u.id);
+          if (def) {
+            return {
+              ...u,
+              colorName: def.colorName,
+              bg: def.bg,
+              text: def.text,
+              border: def.border,
+              hex: def.hex
+            };
+          }
+          return u;
+        });
+      DEFAULT_USERS.forEach(def => {
+        if (!merged.some(u => u.id === def.id)) {
+          merged.push({ ...def });
+        }
+      });
+      return merged;
+    }
+
+    function updateCloudStatusUI(connected, labelText) {
+      isCloudConnected = connected;
+      const loginBadge = document.getElementById('login-cloud-badge');
+      const headerBadge = document.getElementById('header-cloud-badge');
+
+      if (loginBadge) {
+        loginBadge.className = connected
+          ? 'inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30'
+          : 'inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-full bg-amber-500/20 text-amber-200 border border-amber-400/30';
+        loginBadge.innerHTML = connected
+          ? `<span class="w-2 h-2 rounded-full bg-emerald-400"></span><span>${labelText || 'Conectado à Nuvem'}</span>`
+          : `<span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span><span>${labelText || 'Modo Local / Sincronizando'}</span>`;
+      }
+
+      if (headerBadge) {
+        headerBadge.className = connected
+          ? 'hidden sm:inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200'
+          : 'hidden sm:inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200';
+        headerBadge.innerHTML = connected
+          ? `<span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span><span>Nuvem Ativa</span>`
+          : `<span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span><span>Offline</span>`;
+      }
+    }
+
+    function loadLocalFallbackData() {
       try {
         const savedUsers = JSON.parse(localStorage.getItem(STORAGE_KEY_USERS) || 'null');
-        if (Array.isArray(savedUsers) && savedUsers.length > 0) {
-          // Remove o usuário fictício antigo 'agregado_rafa' e sincroniza cores/participantes
-          const merged = savedUsers
-            .filter(u => u.id !== 'agregado_rafa')
-            .map(u => {
-              const def = DEFAULT_USERS.find(d => d.id === u.id);
-              if (def) {
-                return {
-                  ...u,
-                  colorName: def.colorName,
-                  bg: def.bg,
-                  text: def.text,
-                  border: def.border,
-                  hex: def.hex
-                };
-              }
-              return u;
-            });
-          DEFAULT_USERS.forEach(def => {
-            if (!merged.some(u => u.id === def.id)) {
-              merged.push({ ...def });
-            }
-          });
-          state.users = merged;
-        } else {
-          state.users = DEFAULT_USERS.map(u => ({ ...u }));
-        }
+        state.users = mergeUsersWithDefaults(savedUsers);
 
         const savedExpenses = JSON.parse(localStorage.getItem(STORAGE_KEY_EXPENSES) || 'null');
         state.expenses = Array.isArray(savedExpenses) ? savedExpenses : [];
@@ -1202,18 +1267,89 @@
       }
     }
 
+    function saveLocalCacheOnly() {
+      try {
+        localStorage.setItem(STORAGE_KEY_USERS, JSON.stringify(state.users));
+        localStorage.setItem(STORAGE_KEY_EXPENSES, JSON.stringify(state.expenses));
+        localStorage.setItem(STORAGE_KEY_PAYMENTS, JSON.stringify(state.payments));
+        localStorage.setItem(STORAGE_KEY_PDF_TARGETS, JSON.stringify(state.pdfTargets));
+        localStorage.setItem(STORAGE_KEY_DISPUTES, JSON.stringify(state.disputes));
+      } catch (e) {
+        console.warn('Cache local cheio:', e);
+      }
+    }
+
     function saveAllData() {
-      localStorage.setItem(STORAGE_KEY_USERS, JSON.stringify(state.users));
-      localStorage.setItem(STORAGE_KEY_EXPENSES, JSON.stringify(state.expenses));
-      localStorage.setItem(STORAGE_KEY_PAYMENTS, JSON.stringify(state.payments));
-      localStorage.setItem(STORAGE_KEY_PDF_TARGETS, JSON.stringify(state.pdfTargets));
-      localStorage.setItem(STORAGE_KEY_DISPUTES, JSON.stringify(state.disputes));
+      saveLocalCacheOnly();
+
+      if (stateDocRef) {
+        const payload = JSON.parse(JSON.stringify({
+          users: state.users,
+          expenses: state.expenses,
+          payments: state.payments,
+          pdfTargets: state.pdfTargets,
+          disputes: state.disputes,
+          updatedAt: Date.now()
+        }));
+
+        stateDocRef.set(payload)
+          .then(() => updateCloudStatusUI(true, 'Nuvem Sincronizada'))
+          .catch(err => {
+            console.error('Erro ao salvar no Firestore:', err);
+            updateCloudStatusUI(false, 'Erro ao sincronizar');
+            showToast('Atenção: falha ao salvar na nuvem. Verifique as regras do Firestore.', 'error');
+          });
+      }
+    }
+
+    function subscribeToFirebaseRealtime() {
+      if (!stateDocRef) {
+        updateCloudStatusUI(false, 'Modo Local');
+        return;
+      }
+
+      stateDocRef.onSnapshot(
+        (docSnap) => {
+          updateCloudStatusUI(true, 'Nuvem Sincronizada');
+
+          if (docSnap.exists) {
+            const data = docSnap.data() || {};
+            state.users = mergeUsersWithDefaults(data.users);
+            state.expenses = Array.isArray(data.expenses) ? data.expenses : [];
+            state.payments = data.payments && typeof data.payments === 'object' ? data.payments : {};
+            state.pdfTargets = data.pdfTargets && typeof data.pdfTargets === 'object' ? data.pdfTargets : {};
+            state.disputes = Array.isArray(data.disputes) ? data.disputes : [];
+
+            saveLocalCacheOnly();
+
+            if (state.currentUser) {
+              const updatedLoggedUser = state.users.find(u => u.id === state.currentUser.id);
+              if (updatedLoggedUser) {
+                state.currentUser = updatedLoggedUser;
+                updateHeaderUserUI();
+              }
+              renderCurrentView();
+            } else {
+              renderLoginProfiles();
+            }
+            refreshIcons();
+          } else {
+            // Primeiro acesso ao banco vazio na nuvem: envia os dados iniciais/locais
+            saveAllData();
+          }
+        },
+        (error) => {
+          console.error('Erro na escuta do Firestore:', error);
+          updateCloudStatusUI(false, 'Erro de conexão Firestore');
+        }
+      );
     }
 
     function initApp() {
-      loadAllData();
+      loadLocalFallbackData();
       renderLoginProfiles();
       refreshIcons();
+      subscribeToFirebaseRealtime();
     }
 
     // ---------------------------------------------------------
@@ -1341,7 +1477,7 @@
         state.users[idx].pinConfigured = true;
         saveAllData();
         completeLogin(state.users[idx]);
-        showToast('PIN cadastrado com sucesso! Bem-vindo(a)!', 'success');
+        showToast('PIN cadastrado na nuvem! Bem-vindo(a)!', 'success');
       }
     }
 
@@ -1412,7 +1548,7 @@
         const img = new Image();
         img.onload = () => {
           const canvas = document.createElement('canvas');
-          const maxSize = 200;
+          const maxSize = 180;
           let width = img.width;
           let height = img.height;
 
@@ -1433,7 +1569,7 @@
           const ctx = canvas.getContext('2d');
           ctx.drawImage(img, 0, 0, width, height);
 
-          const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.82);
+          const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.78);
           const idx = state.users.findIndex(u => u.id === state.currentUser.id);
           if (idx !== -1) {
             state.users[idx].avatar = compressedDataUrl;
@@ -1442,7 +1578,7 @@
             updateHeaderUserUI();
             openProfilePhotoModal();
             renderCurrentView();
-            showToast('Foto de perfil atualizada com sucesso!', 'success');
+            showToast('Foto de perfil atualizada e sincronizada!', 'success');
           }
         };
         img.src = e.target.result;
@@ -1912,7 +2048,7 @@
       saveAllData();
       closeDisputeModal();
       renderCurrentView();
-      showToast('Contestação registrada! O Alisson poderá revisar na aba Contestações.', 'success');
+      showToast('Contestação enviada! O Alisson poderá revisar na aba Contestações.', 'success');
     }
 
     function resolveDispute(disputeId) {
@@ -2329,7 +2465,7 @@
       saveAllData();
       closeConfirmClearModal();
       renderCurrentView();
-      showToast('Todos os gastos foram zerados!', 'success');
+      showToast('Todos os gastos foram zerados na nuvem!', 'success');
     }
 
     // ---------------------------------------------------------
@@ -2665,7 +2801,7 @@
       saveAllData();
       closeExpenseModal();
       renderCurrentView();
-      showToast('Compra salva na fatura!', 'success');
+      showToast('Compra salva na nuvem!', 'success');
     }
 
     function deleteExpense(id) {
@@ -2748,17 +2884,6 @@
       document.getElementById('imp-prev-net').textContent = formatBRL(posSum + negSum);
     }
 
-    function closeImportModal() {
-      document.getElementById('import-modal').classList.add('hidden');
-    }
-
-    function fillSampleInvoiceText() {
-      document.getElementById('import-raw-textarea').value =
-`15/NOV; 1234; Outback Steakhouse Shopping; 1x; 540,00
-16/NOV; 5678; Posto Shell Combustível; 1x; 220,00
-17/NOV; 1234; Booking Hotel Fim de Ano; 1/3; 1200,00`;
-    }
-
     function handleDropzoneDragOver(e) {
       e.preventDefault();
       document.getElementById('pdf-dropzone').classList.add('border-emerald-500', 'bg-emerald-50');
@@ -2791,6 +2916,7 @@
         const reader = new FileReader();
         reader.onload = (e) => {
           document.getElementById('import-raw-textarea').value = e.target.result;
+          updateImportPreviewSummary();
           showToast('Arquivo CSV/TXT carregado! Clique em "Iniciar Divisão Guiada".', 'success');
         };
         reader.readAsText(file);
@@ -3362,7 +3488,7 @@
         saveAllData();
         closeImportModal();
         renderCurrentView();
-        showToast(`${importedCount} lançamento(s) importado(s) e dividido(s) com sucesso!`, 'success');
+        showToast(`${importedCount} lançamento(s) importado(s) e sincronizado(s) na nuvem!`, 'success');
       } else {
         renderWizardCurrentItem();
       }
@@ -3392,7 +3518,7 @@
       if (idx === -1) return;
 
       if (state.users[idx].role === 'ADMIN') {
-        showToast('Para alterar o PIN do Administrador, use o botão "Meu PIN" no topo.', 'error');
+        showToast('Para alterar o PIN do Administrador, use o botão "PIN" no topo.', 'error');
         return;
       }
 
@@ -3562,7 +3688,7 @@
       renderPeopleListModal();
       renderCurrentView();
       refreshIcons();
-      showToast(`${newUser.name} cadastrado! Ele criará o próprio PIN no primeiro acesso.`, 'success');
+      showToast(`${newUser.name} cadastrado na nuvem! Ele criará o próprio PIN no primeiro acesso.`, 'success');
     }
 
     function removeAggregate(id) {
