@@ -1,0 +1,3604 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cartão — Gestão e Divisão de Faturas</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts: Plus Jakarta Sans & Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- PDF.js para leitura real de faturas em PDF -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+
+  <script>
+    if (window.pdfjsLib) {
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    }
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            display: ['Plus Jakarta Sans', 'sans-serif'],
+          }
+        }
+      }
+    };
+  </script>
+</head>
+<body class="bg-slate-50 text-slate-900 font-sans antialiased min-h-screen flex flex-col">
+
+  <!-- Container de Notificações (Toasts) -->
+  <div id="toast-container" class="fixed bottom-4 right-4 z-[70] flex flex-col gap-2 pointer-events-none"></div>
+
+  <!-- =========================================================
+       TELA DE SELEÇÃO DE PERFIL / LOGIN / 1º ACESSO
+  ========================================================== -->
+  <div id="auth-screen" class="flex-1 flex items-center justify-center p-4 sm:p-6 bg-gradient-to-br from-slate-900 via-slate-800 to-emerald-950">
+    <div class="max-w-2xl w-full bg-white rounded-3xl shadow-2xl border border-slate-200/80 overflow-hidden">
+      <div class="p-6 sm:p-8 bg-slate-900 text-white text-center relative overflow-hidden">
+        <div class="w-12 h-12 rounded-2xl bg-emerald-500 text-slate-950 font-display font-extrabold text-2xl flex items-center justify-center mx-auto mb-3 shadow-lg">
+          C.
+        </div>
+        <h1 class="font-display text-2xl sm:text-3xl font-extrabold tracking-tight">Cartão — Divisão Transparente</h1>
+        <p class="text-slate-300 text-xs sm:text-sm mt-1.5 max-w-md mx-auto">
+          Selecione seu perfil para consultar apenas os seus gastos, acompanhar parcelas futuras e conferir o rateio.
+        </p>
+      </div>
+
+      <div class="p-6 sm:p-8 space-y-6">
+        <div>
+          <p class="text-xs font-bold uppercase tracking-wider text-slate-500 mb-3 text-center">Quem está acessando?</p>
+          <div id="login-profiles-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+            <!-- Perfis renderizados via JS -->
+          </div>
+        </div>
+
+        <!-- Caixa de PIN / Primeiro Acesso -->
+        <div id="login-pin-box" class="hidden bg-slate-50 border border-slate-200 rounded-2xl p-4 sm:p-5 space-y-4">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div id="selected-user-avatar" class="w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm"></div>
+              <div>
+                <h3 id="selected-user-name" class="font-display font-bold text-slate-900 text-sm"></h3>
+                <p id="selected-user-role" class="text-xs text-slate-500"></p>
+              </div>
+            </div>
+            <button type="button" onclick="cancelPinSelection()" class="text-xs font-semibold text-slate-500 hover:text-slate-800 px-2.5 py-1 rounded-lg hover:bg-slate-200/70">
+              Trocar perfil
+            </button>
+          </div>
+
+          <!-- Formulário de Login Normal -->
+          <form id="login-form" onsubmit="handleLoginSubmit(event)" class="flex flex-col sm:flex-row gap-2">
+            <input
+              type="password"
+              id="pin-input"
+              maxlength="4"
+              inputmode="numeric"
+              pattern="[0-9]*"
+              placeholder="Digite seu PIN (4 dígitos)"
+              class="flex-1 px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+              required
+            />
+            <button
+              type="submit"
+              class="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-sm rounded-xl transition flex items-center justify-center gap-2 shadow-sm"
+            >
+              <span>Entrar</span>
+              <i data-lucide="arrow-right" class="w-4 h-4"></i>
+            </button>
+          </form>
+
+          <!-- Formulário de Primeiro Acesso (Criar próprio PIN) -->
+          <form id="first-access-form" onsubmit="handleFirstAccessSubmit(event)" class="hidden space-y-2.5">
+            <div class="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-center gap-2">
+              <i data-lucide="key-round" class="w-4 h-4 text-amber-600 shrink-0"></i>
+              <span><strong>Primeiro Acesso:</strong> Crie seu PIN pessoal de 4 dígitos para proteger sua planilha.</span>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <input
+                type="password"
+                id="new-pin-input"
+                maxlength="4"
+                inputmode="numeric"
+                pattern="\d{4}"
+                placeholder="Novo PIN (4 números)"
+                class="px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                required
+              />
+              <input
+                type="password"
+                id="confirm-pin-input"
+                maxlength="4"
+                inputmode="numeric"
+                pattern="\d{4}"
+                placeholder="Confirmar PIN"
+                class="px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                required
+              />
+            </div>
+            <button
+              type="submit"
+              class="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-xl transition flex items-center justify-center gap-2 shadow-sm"
+            >
+              <i data-lucide="check-circle-2" class="w-4 h-4"></i>
+              <span>Salvar Meu PIN e Entrar</span>
+            </button>
+          </form>
+
+          <p id="login-error" class="hidden text-xs text-rose-600 font-medium mt-2"></p>
+        </div>
+
+        <div class="text-center">
+          <p class="text-[11px] text-slate-400">
+            Cada participante possui seu próprio PIN • Novos usuários cadastram sua senha no 1º acesso.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================================================
+       APLICAÇÃO PRINCIPAL (DASHBOARD)
+  ========================================================== -->
+  <div id="app-shell" class="hidden flex-1 flex flex-col">
+
+    <!-- Top Navbar -->
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-30">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
+        <div class="flex items-center gap-3">
+          <div class="w-9 h-9 rounded-xl bg-slate-900 text-white flex items-center justify-center font-display font-extrabold text-lg shadow-sm">
+            C<span class="text-emerald-400">.</span>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="font-display font-bold text-slate-900 text-base sm:text-lg tracking-tight">Cartão</span>
+              <span id="header-role-badge" class="text-[11px] font-semibold px-2 py-0.5 rounded-full"></span>
+            </div>
+            <p class="text-[11px] text-slate-500 hidden sm:block">Controle de Faturas & Divisão Transparente</p>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2 sm:gap-3">
+          <!-- Seletor de Mês -->
+          <div class="flex items-center bg-slate-100 border border-slate-200 rounded-xl p-1">
+            <button type="button" onclick="changeMonth(-1)" title="Mês anterior" class="p-1.5 rounded-lg hover:bg-white text-slate-600 transition">
+              <i data-lucide="chevron-left" class="w-4 h-4"></i>
+            </button>
+            <span id="current-month-label" class="px-2.5 text-xs sm:text-sm font-bold text-slate-800 min-w-[115px] text-center capitalize">
+              Novembro 2026
+            </span>
+            <button type="button" onclick="changeMonth(1)" title="Próximo mês (projeções)" class="p-1.5 rounded-lg hover:bg-white text-slate-600 transition">
+              <i data-lucide="chevron-right" class="w-4 h-4"></i>
+            </button>
+          </div>
+
+          <!-- Seletor de Cartão -->
+          <select id="card-filter" onchange="setCardFilter(this.value)" class="bg-slate-100 border border-slate-200 text-slate-800 text-xs sm:text-sm font-semibold rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+            <option value="ALL">Todos os Cartões</option>
+            <option value="Cartão 1">Cartão 1 (Principal)</option>
+            <option value="Cartão 2">Cartão 2 (Secundário)</option>
+          </select>
+
+          <!-- Perfil Logado & Trocar -->
+          <div class="flex items-center gap-2 pl-2 border-l border-slate-200">
+            <button type="button" onclick="openProfilePhotoModal()" title="Alterar Foto de Perfil" class="relative group shrink-0 rounded-full focus:outline-none focus:ring-2 focus:ring-emerald-500">
+              <div id="header-user-avatar" class="w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs overflow-hidden"></div>
+              <span class="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-slate-900 text-white flex items-center justify-center border border-white opacity-90 group-hover:bg-emerald-600 transition">
+                <i data-lucide="camera" class="w-2 h-2"></i>
+              </span>
+            </button>
+            <div class="hidden md:block text-left">
+              <p id="header-user-name" class="text-xs font-bold text-slate-800 leading-none"></p>
+              <div class="flex items-center gap-1.5 mt-0.5">
+                <button type="button" onclick="openProfilePhotoModal()" class="text-[11px] text-indigo-700 hover:underline font-semibold">
+                  Foto
+                </button>
+                <span class="text-slate-300 text-[10px]">•</span>
+                <button type="button" onclick="openChangeMyPinModal()" class="text-[11px] text-emerald-700 hover:underline font-semibold">
+                  PIN
+                </button>
+                <span class="text-slate-300 text-[10px]">•</span>
+                <button type="button" onclick="logout()" class="text-[11px] text-slate-500 hover:text-rose-600 font-medium">
+                  Sair
+                </button>
+              </div>
+            </div>
+            <button type="button" onclick="openProfilePhotoModal()" title="Alterar Foto de Perfil" class="md:hidden p-2 text-slate-500 hover:text-indigo-600 rounded-lg hover:bg-slate-100">
+              <i data-lucide="camera" class="w-4 h-4"></i>
+            </button>
+            <button type="button" onclick="openChangeMyPinModal()" title="Alterar Meu PIN" class="md:hidden p-2 text-slate-500 hover:text-emerald-600 rounded-lg hover:bg-slate-100">
+              <i data-lucide="key-round" class="w-4 h-4"></i>
+            </button>
+            <button type="button" onclick="logout()" title="Sair / Trocar Perfil" class="md:hidden p-2 text-slate-500 hover:text-rose-600 rounded-lg hover:bg-slate-100">
+              <i data-lucide="log-out" class="w-4 h-4"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Barra de Navegação por Abas -->
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 border-t border-slate-100 overflow-x-auto">
+        <nav id="main-tabs" class="flex space-x-1 sm:space-x-2 py-1.5" aria-label="Tabs">
+          <!-- Renderizado via JS -->
+        </nav>
+      </div>
+    </header>
+
+    <!-- Conteúdo Principal -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+      <!-- =====================================================
+           ABA 1: MINHA PLANILHA (VISÃO DO PARTICIPANTE LOGADO)
+      ====================================================== -->
+      <section id="tab-sheet" class="space-y-6">
+        <div id="month-status-banner" class="rounded-2xl p-4 border flex flex-col sm:flex-row sm:items-center justify-between gap-4"></div>
+
+        <!-- KPIs do Participante -->
+        <div id="participant-kpis-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div class="bg-white rounded-2xl p-5 border border-slate-200/90 shadow-sm">
+            <div class="flex items-center justify-between text-slate-500 mb-2">
+              <span class="text-xs font-semibold uppercase tracking-wider">Sua Parte no Mês</span>
+              <span class="p-2 rounded-xl bg-emerald-50 text-emerald-600"><i data-lucide="wallet" class="w-4 h-4"></i></span>
+            </div>
+            <p id="kpi-my-total" class="font-display text-2xl sm:text-3xl font-extrabold text-slate-900 tabular-nums">R$ 0,00</p>
+            <p id="kpi-my-diff" class="text-xs mt-1.5 font-medium text-slate-500">Calculando variação...</p>
+          </div>
+
+          <div class="bg-white rounded-2xl p-5 border border-slate-200/90 shadow-sm">
+            <div class="flex items-center justify-between text-slate-500 mb-2">
+              <span class="text-xs font-semibold uppercase tracking-wider">Status do Acerto</span>
+              <span class="p-2 rounded-xl bg-amber-50 text-amber-600"><i data-lucide="clock" class="w-4 h-4"></i></span>
+            </div>
+            <p id="kpi-my-status" class="font-display text-2xl font-extrabold text-slate-900">Pendente</p>
+            <p id="kpi-my-status-sub" class="text-xs mt-1.5 text-slate-500">Aguardando fechamento/pagamento</p>
+          </div>
+
+          <div class="bg-white rounded-2xl p-5 border border-slate-200/90 shadow-sm">
+            <div class="flex items-center justify-between text-slate-500 mb-2">
+              <span class="text-xs font-semibold uppercase tracking-wider">Compras Compartilhadas</span>
+              <span class="p-2 rounded-xl bg-indigo-50 text-indigo-600"><i data-lucide="users" class="w-4 h-4"></i></span>
+            </div>
+            <p id="kpi-my-count" class="font-display text-2xl font-extrabold text-slate-900 tabular-nums">0 itens</p>
+            <p id="kpi-my-installments" class="text-xs mt-1.5 text-slate-500">0 parcelados neste mês</p>
+          </div>
+
+          <div id="admin-pix-card" class="hidden bg-gradient-to-br from-emerald-600 to-teal-700 rounded-2xl p-5 text-white shadow-sm flex-col justify-between">
+            <div>
+              <div class="flex items-center justify-between mb-1">
+                <span class="text-xs font-semibold uppercase tracking-wider text-emerald-100">Minha Chave PIX (Admin)</span>
+                <i data-lucide="qr-code" class="w-4 h-4 text-emerald-200"></i>
+              </div>
+              <p class="text-xs text-emerald-50/90 leading-relaxed">
+                Copie sua chave PIX para enviar ou colar nas cobranças.
+              </p>
+            </div>
+            <button type="button" onclick="copyAlissonPix()" class="mt-3 w-full py-2 px-3 bg-white/15 hover:bg-white/25 border border-white/25 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition">
+              <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+              <span>Copiar Chave PIX</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Tabela Estilo Planilha -->
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div class="p-4 sm:p-5 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50/60">
+            <div>
+              <h3 class="font-display font-bold text-slate-900 text-base flex items-center gap-2">
+                <i data-lucide="table" class="w-4 h-4 text-emerald-600"></i>
+                <span>Planilha de Gastos — <span id="sheet-user-title"></span></span>
+              </h3>
+              <p class="text-xs text-slate-500 mt-0.5">
+                Exibindo somente os lançamentos que envolvem você, com valor original da compra e sua cota.
+              </p>
+            </div>
+            <div class="flex items-center gap-2">
+              <div class="relative">
+                <i data-lucide="search" class="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
+                <input
+                  type="text"
+                  id="sheet-search"
+                  oninput="renderCurrentView()"
+                  placeholder="Filtrar estabelecimento..."
+                  class="pl-8 pr-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse">
+              <thead>
+                <tr class="bg-slate-100/80 border-b border-slate-200 text-[11px] font-bold uppercase tracking-wider text-slate-600">
+                  <th class="py-3 px-4">Data</th>
+                  <th class="py-3 px-4">Estabelecimento / Descrição</th>
+                  <th class="py-3 px-4">Cartão</th>
+                  <th class="py-3 px-4 text-center">Parcela</th>
+                  <th class="py-3 px-4 text-right">Valor Real (Compra)</th>
+                  <th class="py-3 px-4 text-center">Divisão</th>
+                  <th class="py-3 px-4 text-right bg-emerald-50/70 text-emerald-900">Sua Parte (R$)</th>
+                  <th class="py-3 px-4 text-center">Ação</th>
+                </tr>
+              </thead>
+              <tbody id="participant-sheet-body" class="divide-y divide-slate-200/80 text-sm"></tbody>
+              <tfoot id="participant-sheet-foot" class="bg-slate-900 text-white font-bold text-sm"></tfoot>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- =====================================================
+           ABA 2: TRANSPARÊNCIA ("COMO FOI DIVIDIDO")
+      ====================================================== -->
+      <section id="tab-transparency" class="hidden space-y-6">
+        <div class="bg-white rounded-2xl p-5 sm:p-6 border border-slate-200 shadow-sm">
+          <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-5 border-b border-slate-100">
+            <div>
+              <div class="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-full mb-2">
+                <i data-lucide="eye" class="w-3.5 h-3.5"></i>
+                <span>Transparência de Rateio</span>
+              </div>
+              <h2 class="font-display text-xl font-bold text-slate-900">Como cada compra sua foi dividida</h2>
+              <p class="text-xs sm:text-sm text-slate-500 mt-1">
+                Aqui você confere o valor total real de cada item em que você participou e exatamente com quem a conta foi dividida. Compras individuais de outras pessoas permanecem privadas.
+              </p>
+            </div>
+          </div>
+
+          <div id="transparency-cards-grid" class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6"></div>
+        </div>
+      </section>
+
+      <!-- =====================================================
+           ABA 2B: CONTESTAÇÕES
+      ====================================================== -->
+      <section id="tab-disputes" class="hidden space-y-6">
+        <div class="bg-white rounded-2xl p-5 sm:p-6 border border-slate-200 shadow-sm">
+          <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-5 border-b border-slate-100">
+            <div>
+              <div class="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-800 bg-amber-100 px-2.5 py-1 rounded-full mb-2">
+                <i data-lucide="flag" class="w-3.5 h-3.5"></i>
+                <span>Revisão & Conferência</span>
+              </div>
+              <h2 class="font-display text-xl font-bold text-slate-900">Lançamentos Contestados</h2>
+              <p class="text-xs sm:text-sm text-slate-500 mt-1">
+                Acompanhe aqui os lançamentos que foram sinalizados pelos participantes para revisão do rateio ou do valor.
+              </p>
+            </div>
+          </div>
+
+          <div id="disputes-list-container" class="mt-6"></div>
+        </div>
+      </section>
+
+      <!-- =====================================================
+           ABA 3: EVOLUÇÃO & GRÁFICOS
+      ====================================================== -->
+      <section id="tab-charts" class="hidden space-y-6">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div class="lg:col-span-2 bg-white rounded-2xl p-5 sm:p-6 border border-slate-200 shadow-sm">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-6">
+              <div>
+                <h3 class="font-display font-bold text-slate-900 text-base sm:text-lg" id="chart-main-title">Evolução Mensal dos Seus Gastos</h3>
+                <p class="text-xs text-slate-500">Acompanhe aumentos, reduções e parcelas já comprometidas nos próximos meses.</p>
+              </div>
+              <span id="chart-trend-badge" class="inline-flex items-center gap-1 text-xs font-bold px-3 py-1.5 rounded-full"></span>
+            </div>
+            <div class="h-72 sm:h-80 w-full relative">
+              <canvas id="evolutionChart"></canvas>
+            </div>
+          </div>
+
+          <div class="bg-white rounded-2xl p-5 sm:p-6 border border-slate-200 shadow-sm flex flex-col justify-between">
+            <div>
+              <h3 class="font-display font-bold text-slate-900 text-base sm:text-lg" id="chart-secondary-title">Divisão por Cartão</h3>
+              <p class="text-xs text-slate-500 mb-4" id="chart-secondary-sub">Proporção no mês selecionado</p>
+            </div>
+            <div class="h-56 w-full relative flex items-center justify-center">
+              <canvas id="distributionChart"></canvas>
+            </div>
+            <div id="chart-secondary-legend" class="mt-4 pt-4 border-t border-slate-100 space-y-2 text-xs"></div>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm">
+          <h4 class="font-display font-bold text-slate-900 text-sm mb-4">Resumo Comparativo Mês a Mês</h4>
+          <div id="monthly-comparison-strip" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3"></div>
+        </div>
+      </section>
+
+      <!-- =====================================================
+           ABA 4 (EXCLUSIVA ADMIN): PAINEL DO ALISSON & IMPORTADOR
+      ====================================================== -->
+      <section id="tab-admin" class="hidden space-y-6">
+        <div class="bg-slate-900 text-white rounded-2xl p-5 sm:p-6 shadow-md flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div>
+            <div class="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 text-xs font-semibold mb-2">
+              <i data-lucide="shield" class="w-3.5 h-3.5"></i>
+              <span>Área Restrita do Administrador (Alisson)</span>
+            </div>
+            <h2 class="font-display text-xl sm:text-2xl font-bold">Gestão de Faturas, Importação & Acerto de Contas</h2>
+            <p class="text-slate-300 text-xs sm:text-sm mt-1">
+              Importe a fatura em PDF, divida cada compra interativamente e envie o resumo de cobrança para cada amigo.
+            </p>
+          </div>
+          <div class="flex flex-wrap gap-2.5">
+            <button type="button" onclick="openNewExpenseModal()" class="px-4 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-xs sm:text-sm rounded-xl flex items-center gap-2 transition shadow-sm">
+              <i data-lucide="plus-circle" class="w-4 h-4"></i>
+              <span>Lançar Compra Manual</span>
+            </button>
+            <button type="button" onclick="openImportWizardModal()" class="px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white border border-white/20 font-semibold text-xs sm:text-sm rounded-xl flex items-center gap-2 transition">
+              <i data-lucide="file-text" class="w-4 h-4 text-emerald-300"></i>
+              <span>Importar Fatura (PDF / CSV)</span>
+            </button>
+            <button type="button" onclick="openManagePeopleModal()" class="px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white border border-white/20 font-semibold text-xs sm:text-sm rounded-xl flex items-center gap-2 transition">
+              <i data-lucide="shield-check" class="w-4 h-4 text-sky-300"></i>
+              <span>Participantes & PINs</span>
+            </button>
+            <button type="button" onclick="requestClearAllExpenses()" class="px-4 py-2.5 bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 border border-rose-400/30 font-semibold text-xs sm:text-sm rounded-xl flex items-center gap-2 transition">
+              <i data-lucide="trash-2" class="w-4 h-4 text-rose-300"></i>
+              <span>Zerar Gastos</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Painel de Conferência Total da Fatura (Bater com PDF) -->
+        <div class="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-sm">
+          <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 flex-1">
+              <div class="p-3 rounded-xl bg-slate-50 border border-slate-200/80">
+                <span class="text-[11px] font-bold uppercase tracking-wider text-slate-500 block">Compras Lançadas (+)</span>
+                <span id="admin-check-purchases" class="font-display text-lg font-extrabold text-slate-900 tabular-nums">R$ 0,00</span>
+              </div>
+              <div class="p-3 rounded-xl bg-cyan-50/60 border border-cyan-200/80">
+                <span class="text-[11px] font-bold uppercase tracking-wider text-cyan-700 block">Reembolsos / Descontos (-)</span>
+                <span id="admin-check-refunds" class="font-display text-lg font-extrabold text-cyan-700 tabular-nums">R$ 0,00</span>
+              </div>
+              <div class="p-3 rounded-xl bg-emerald-50/70 border border-emerald-200">
+                <span class="text-[11px] font-bold uppercase tracking-wider text-emerald-800 block">Total Líquido no Sistema</span>
+                <span id="admin-check-net" class="font-display text-lg font-extrabold text-emerald-900 tabular-nums">R$ 0,00</span>
+              </div>
+            </div>
+
+            <div class="lg:w-80 p-3 rounded-xl bg-slate-900 text-white space-y-2">
+              <div class="flex items-center justify-between gap-2">
+                <label for="admin-pdf-target-input" class="text-[11px] font-bold uppercase tracking-wider text-slate-300">Total da Fatura PDF (R$)</label>
+                <span id="admin-pdf-diff-badge" class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-800 text-slate-300">Informe p/ conferir</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="text-xs font-bold text-slate-400">R$</span>
+                <input
+                  type="number"
+                  step="0.01"
+                  id="admin-pdf-target-input"
+                  oninput="handleAdminPdfTargetChange(this.value)"
+                  placeholder="Ex: 5076,48"
+                  class="w-full px-2.5 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-sm font-extrabold text-white tabular-nums focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Cards de Acerto de Contas -->
+        <div>
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="font-display font-bold text-slate-900 text-base flex items-center gap-2">
+              <i data-lucide="banknote" class="w-4 h-4 text-emerald-600"></i>
+              <span>Resumo de Acerto por Participante (<span id="admin-settlement-month"></span>)</span>
+            </h3>
+            <span class="text-xs text-slate-500">Clique em "Cobrar WhatsApp" para copiar o resumo pronto</span>
+          </div>
+          <div id="admin-settlement-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"></div>
+        </div>
+
+        <!-- Fatura Bruta Completa -->
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div class="p-4 sm:p-5 border-b border-slate-200 bg-slate-50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <div class="flex items-center gap-2">
+                <h3 class="font-display font-bold text-slate-900 text-base">Fatura Bruta Completa (Visão Exclusiva Admin)</h3>
+                <span class="text-[11px] font-bold bg-rose-100 text-rose-700 px-2 py-0.5 rounded-full">Confidencial</span>
+              </div>
+              <p class="text-xs text-slate-500 mt-0.5">
+                Todos os lançamentos do mês nos cartões selecionados. Você pode editar participantes ou excluir itens.
+              </p>
+            </div>
+            <div class="text-right">
+              <span class="text-xs text-slate-500 block">Total Geral da Fatura</span>
+              <span id="admin-raw-total" class="font-display font-extrabold text-lg text-slate-900 tabular-nums">R$ 0,00</span>
+            </div>
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse">
+              <thead>
+                <tr class="bg-slate-100/80 border-b border-slate-200 text-[11px] font-bold uppercase tracking-wider text-slate-600">
+                  <th class="py-3 px-4">Data</th>
+                  <th class="py-3 px-4">Estabelecimento</th>
+                  <th class="py-3 px-4">Cartão</th>
+                  <th class="py-3 px-4 text-center">Parcela</th>
+                  <th class="py-3 px-4 text-right">Valor Parcela</th>
+                  <th class="py-3 px-4">Dividido Entre</th>
+                  <th class="py-3 px-4 text-right">Ações</th>
+                </tr>
+              </thead>
+              <tbody id="admin-raw-table-body" class="divide-y divide-slate-200/80 text-sm"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- =========================================================
+       MODAL 1: LANÇAR / EDITAR COMPRA MANUAL
+  ========================================================== -->
+  <div id="expense-modal" class="fixed inset-0 z-50 hidden bg-slate-900/60 backdrop-blur-sm overflow-y-auto p-3 sm:p-6">
+    <div class="min-h-full flex items-center justify-center">
+      <div class="bg-white rounded-3xl max-w-lg w-full border border-slate-200 shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+        <div class="px-6 py-4 bg-slate-900 text-white flex items-center justify-between shrink-0">
+          <h3 id="expense-modal-title" class="font-display font-bold text-base">Lançar Nova Compra na Fatura</h3>
+          <button type="button" onclick="closeExpenseModal()" class="text-slate-400 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+        </div>
+
+        <form id="expense-form" onsubmit="saveExpenseForm(event)" class="p-5 sm:p-6 space-y-4 overflow-y-auto flex-1">
+          <input type="hidden" id="exp-id" />
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">Data da Compra</label>
+              <input type="date" id="exp-date" required class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">Cartão Utilizado</label>
+              <select id="exp-card" class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                <option value="Cartão 1">Cartão 1 (Principal)</option>
+                <option value="Cartão 2">Cartão 2 (Secundário)</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">Estabelecimento / Descrição</label>
+            <input type="text" id="exp-desc" placeholder="Ex: Churrascaria Boi na Brasa, Uber, Mercado..." required class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">Valor Total (use negativo p/ reembolso)</label>
+              <input type="number" step="0.01" id="exp-amount" placeholder="0,00 ou -50,00" required oninput="handleModalTotalAmountChange()" class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm font-bold tabular-nums focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">Parcelamento</label>
+              <select id="exp-installments" onchange="updateModalSplitPreview()" class="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                <option value="1">À vista (1x)</option>
+                <option value="2">2x sem juros</option>
+                <option value="3">3x sem juros</option>
+                <option value="4">4x sem juros</option>
+                <option value="5">5x sem juros</option>
+                <option value="6">6x sem juros</option>
+                <option value="8">8x sem juros</option>
+                <option value="10">10x sem juros</option>
+                <option value="12">12x sem juros</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <div class="flex flex-wrap items-center justify-between gap-1.5 mb-2">
+              <label class="text-xs font-bold text-slate-700">Para quem esta compra deve ser dividida?</label>
+              <div class="flex flex-wrap gap-1">
+                <button type="button" onclick="selectPresetParticipants('ALL')" class="text-[11px] font-semibold px-2 py-0.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-slate-700">Selecionar Todos</button>
+                <button type="button" onclick="selectPresetParticipants('NONE')" class="text-[11px] font-semibold px-2 py-0.5 bg-rose-50 hover:bg-rose-100 rounded-lg text-rose-700">Limpar Seleção</button>
+                <button type="button" onclick="selectPresetParticipants('CORE')" class="text-[11px] font-semibold px-2 py-0.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-slate-700">Os 9 Fixos</button>
+                <button type="button" onclick="selectPresetParticipants('ADMIN')" class="text-[11px] font-semibold px-2 py-0.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-slate-700">Só Alisson</button>
+              </div>
+            </div>
+
+            <!-- Modo de Divisão (Manual) -->
+            <div class="grid grid-cols-2 gap-2 mb-2.5 p-1 bg-slate-100 rounded-xl">
+              <button type="button" id="exp-split-mode-equal" onclick="setModalSplitMode('EQUAL')" class="py-1.5 px-2.5 rounded-lg text-xs font-bold bg-white text-slate-900 shadow-sm transition">
+                Dividir por Igual
+              </button>
+              <button type="button" id="exp-split-mode-custom" onclick="setModalSplitMode('CUSTOM')" class="py-1.5 px-2.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 transition">
+                Valores Personalizados (R$)
+              </button>
+            </div>
+
+            <div id="exp-participants-checkboxes" class="grid grid-cols-1 sm:grid-cols-2 gap-2"></div>
+          </div>
+
+          <div id="exp-split-preview" class="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-xs text-emerald-900">
+            Selecione os participantes e o valor para ver o cálculo.
+          </div>
+
+          <div class="pt-2 flex justify-end gap-2">
+            <button type="button" onclick="closeExpenseModal()" class="px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 rounded-xl">Cancelar</button>
+            <button type="submit" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-xl shadow-sm">Salvar na Fatura</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================================================
+       MODAL 2: IMPORTADOR DE FATURA (PDF / CSV / TEXTO) & ASSISTENTE
+  ========================================================== -->
+  <div id="import-modal" class="fixed inset-0 z-50 hidden bg-slate-900/60 backdrop-blur-sm overflow-y-auto p-3 sm:p-6">
+    <div class="min-h-full flex items-center justify-center">
+      <div class="bg-white rounded-3xl max-w-2xl w-full border border-slate-200 shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+        <div class="px-6 py-4 bg-slate-900 text-white flex items-center justify-between shrink-0">
+          <div class="flex items-center gap-2">
+            <i data-lucide="sparkles" class="w-5 h-5 text-emerald-400"></i>
+            <h3 class="font-display font-bold text-base">Importar Fatura (PDF / CSV) & Divisão Guiada</h3>
+          </div>
+          <button type="button" onclick="closeImportModal()" class="text-slate-400 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+        </div>
+
+        <!-- Passo 1: Upload PDF/CSV ou Colagem de Texto -->
+        <div id="import-step-1" class="p-5 sm:p-6 space-y-4 overflow-y-auto flex-1">
+          <p class="text-xs text-slate-600">
+            Anexe o <strong>PDF da fatura</strong> (ex: Nubank) ou cole os lançamentos no padrão
+            <code class="bg-slate-100 px-1.5 py-0.5 rounded text-slate-800 font-semibold">DD/MMM; Número do cartão; Descrição; Parcelas; Valor</code>.
+          </p>
+
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">Cartão Padrão (se omitido)</label>
+              <select id="import-card-select" class="w-full px-3 py-2.5 border border-slate-300 rounded-xl text-sm font-medium">
+                <option value="Cartão 1">Cartão 1 (Principal)</option>
+                <option value="Cartão 2">Cartão 2 (Secundário)</option>
+              </select>
+            </div>
+            <div class="sm:col-span-2">
+              <label class="block text-xs font-bold text-slate-700 mb-1">Ano de Referência (para datas DD/MMM)</label>
+              <select id="import-year-select" class="w-full px-3 py-2.5 border border-slate-300 rounded-xl text-sm font-medium">
+                <option value="2026" selected>2026</option>
+                <option value="2025">2025</option>
+                <option value="2027">2027</option>
+              </select>
+            </div>
+          </div>
+
+          <div
+            id="pdf-dropzone"
+            ondragover="handleDropzoneDragOver(event)"
+            ondragleave="handleDropzoneDragLeave(event)"
+            ondrop="handleDropzoneDrop(event)"
+            onclick="document.getElementById('import-file-input').click()"
+            class="border-2 border-dashed border-slate-300 hover:border-emerald-500 bg-slate-50/70 hover:bg-emerald-50/40 rounded-2xl p-5 text-center cursor-pointer transition"
+          >
+            <input type="file" id="import-file-input" accept=".pdf,.csv,.txt,application/pdf" onchange="handleImportFileUpload(event)" class="hidden" />
+            <div class="w-10 h-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto mb-2">
+              <i data-lucide="file-up" class="w-5 h-5"></i>
+            </div>
+            <p class="text-sm font-bold text-slate-800">Clique para anexar a Fatura em PDF (ou arraste aqui)</p>
+            <p class="text-xs text-slate-500 mt-0.5">Suporta arquivos <span class="font-semibold text-slate-700">.PDF</span>, <span class="font-semibold text-slate-700">.CSV</span> e <span class="font-semibold text-slate-700">.TXT</span></p>
+            <div id="pdf-reading-status" class="hidden mt-3 inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-100 text-indigo-800 text-xs font-bold">
+              <i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin"></i>
+              <span id="pdf-reading-text">Processando PDF...</span>
+            </div>
+          </div>
+
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="text-xs font-bold text-slate-700">Lançamentos Identificados (Editável antes de iniciar)</label>
+              <div class="flex items-center gap-3">
+                <button type="button" id="toggle-raw-pdf-btn" onclick="toggleRawPdfPreview()" class="hidden text-xs text-slate-600 hover:underline font-semibold">Ver texto bruto do PDF</button>
+                <button type="button" onclick="fillSampleInvoiceText()" class="text-xs text-indigo-600 hover:underline font-semibold">Preencher exemplo</button>
+              </div>
+            </div>
+            <textarea
+              id="import-raw-textarea"
+              rows="5"
+              oninput="updateImportPreviewSummary()"
+              placeholder="Modelo exato da planilha (DD/MMM; Número do cartão; Descrição; Parcelas; Valor):&#10;15/NOV; 1234; Outback Steakhouse; 1x; 480,00&#10;17/NOV; 5678; Decathlon Barraca Camping; 1/3; 600,00"
+              class="w-full p-3 border border-slate-300 rounded-xl text-xs font-mono focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+            ></textarea>
+            <div id="import-preview-totals-bar" class="hidden mt-2 p-3 rounded-xl bg-slate-900 text-white flex flex-wrap items-center justify-between gap-2 text-xs">
+              <div class="flex flex-wrap items-center gap-3">
+                <span>Itens lidos: <strong id="imp-prev-count" class="text-emerald-400">0</strong></span>
+                <span>Compras: <strong id="imp-prev-pos" class="tabular-nums">R$ 0,00</strong></span>
+                <span>Estornos: <strong id="imp-prev-neg" class="text-cyan-300 tabular-nums">R$ 0,00</strong></span>
+              </div>
+              <div>
+                <span class="text-slate-300">Total na Fatura do Mês: </span>
+                <strong id="imp-prev-net" class="text-sm font-extrabold text-emerald-400 tabular-nums">R$ 0,00</strong>
+              </div>
+            </div>
+            <textarea
+              id="import-raw-pdf-dump"
+              rows="4"
+              readonly
+              class="hidden mt-2 w-full p-2.5 bg-slate-100 border border-slate-200 rounded-xl text-[11px] font-mono text-slate-600"
+            ></textarea>
+          </div>
+
+          <div class="flex justify-end gap-2 pt-2">
+            <button type="button" onclick="closeImportModal()" class="px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 rounded-xl">Cancelar</button>
+            <button type="button" onclick="startInteractiveDivisionWizard()" class="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-xl flex items-center gap-2 shadow-sm">
+              <span>Iniciar Divisão Guiada</span>
+              <i data-lucide="arrow-right" class="w-4 h-4"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- Passo 2: Wizard Perguntando Item por Item -->
+        <div id="import-step-2" class="hidden flex flex-col flex-1 overflow-hidden">
+          <div class="p-5 sm:p-6 space-y-4 overflow-y-auto flex-1">
+            <div class="flex items-center justify-between text-xs font-semibold text-slate-500">
+              <span id="wizard-progress-text">Item 1 de 3</span>
+              <div class="w-40 h-2 bg-slate-100 rounded-full overflow-hidden">
+                <div id="wizard-progress-bar" class="h-full bg-emerald-500 transition-all duration-300" style="width: 33%"></div>
+              </div>
+            </div>
+
+            <div class="bg-slate-50 border border-slate-200 rounded-2xl p-4">
+              <div class="flex items-start justify-between gap-4">
+                <div>
+                  <span id="wizard-item-date" class="text-xs font-semibold text-slate-500">12/11/2026 • Cartão 1</span>
+                  <h4 id="wizard-item-desc" class="font-display text-lg font-extrabold text-slate-900 mt-0.5">Outback Steakhouse</h4>
+                  <div class="flex flex-wrap items-center gap-1.5 mt-1">
+                    <span id="wizard-item-inst" class="inline-block text-xs font-semibold px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-700">À vista (1x)</span>
+                    <span id="wizard-item-refund-badge" class="hidden inline-block text-xs font-bold px-2 py-0.5 rounded-md bg-cyan-100 text-cyan-800 border border-cyan-300">Reembolso / Desconto</span>
+                  </div>
+                </div>
+                <div class="text-right">
+                  <span id="wizard-item-amount-label" class="text-xs text-slate-500 block">Valor Total</span>
+                  <span id="wizard-item-amount" class="font-display text-2xl font-extrabold text-slate-900 tabular-nums">R$ 480,00</span>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <p class="font-display font-bold text-slate-900 text-sm mb-2">
+                Alisson, para quem este valor deve ser dividido?
+              </p>
+              <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+                <div class="flex flex-wrap gap-1.5">
+                  <button type="button" onclick="wizardSelectPreset('ALL')" class="text-xs font-semibold px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 transition">Selecionar Todos</button>
+                  <button type="button" onclick="wizardSelectPreset('NONE')" class="text-xs font-semibold px-2.5 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 transition">Limpar Seleção</button>
+                  <button type="button" onclick="wizardSelectPreset('CORE')" class="text-xs font-semibold px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 transition">Os 9 Fixos</button>
+                  <button type="button" onclick="wizardSelectPreset('ADMIN')" class="text-xs font-semibold px-2.5 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 transition">Só Alisson</button>
+                </div>
+
+                <!-- Alternador de Tipo de Divisão no Wizard -->
+                <div class="inline-flex p-1 bg-slate-100 rounded-xl">
+                  <button type="button" id="wiz-split-mode-equal" onclick="setWizardSplitMode('EQUAL')" class="px-2.5 py-1 rounded-lg text-xs font-bold bg-white text-slate-900 shadow-sm transition">
+                    Igual
+                  </button>
+                  <button type="button" id="wiz-split-mode-custom" onclick="setWizardSplitMode('CUSTOM')" class="px-2.5 py-1 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 transition">
+                    Personalizado (R$)
+                  </button>
+                </div>
+              </div>
+
+              <div id="wizard-participants-grid" class="grid grid-cols-1 sm:grid-cols-2 gap-2"></div>
+
+              <div id="wizard-split-summary" class="mt-3 bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-xs text-emerald-900"></div>
+            </div>
+          </div>
+
+          <div class="px-5 sm:px-6 py-3.5 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-2 shrink-0">
+            <div class="flex items-center gap-1.5">
+              <button type="button" id="wizard-prev-btn" onclick="wizardPrevItem()" class="hidden text-xs font-bold text-slate-700 hover:text-slate-900 px-3 py-2 rounded-xl bg-white border border-slate-300 hover:bg-slate-100 flex items-center gap-1 transition">
+                <i data-lucide="arrow-left" class="w-3.5 h-3.5"></i>
+                <span>Anterior</span>
+              </button>
+              <button type="button" onclick="wizardSkipItem()" class="text-xs font-semibold text-slate-500 hover:text-slate-700 px-3 py-2 rounded-xl hover:bg-slate-200/60 transition">
+                Ignorar
+              </button>
+            </div>
+            <button type="button" onclick="wizardConfirmItem()" class="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-sm font-bold rounded-xl flex items-center gap-2 shadow-sm transition">
+              <span>Confirmar Divisão</span>
+              <i data-lucide="check" class="w-4 h-4 text-emerald-400"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================================================
+       MODAL 3: CONTROLE TOTAL DE PARTICIPANTES, AGREGADOS & PINS (ADMIN)
+  ========================================================== -->
+  <div id="people-modal" class="fixed inset-0 z-50 hidden bg-slate-900/60 backdrop-blur-sm overflow-y-auto p-3 sm:p-6">
+    <div class="min-h-full flex items-center justify-center">
+      <div class="bg-white rounded-3xl max-w-2xl w-full border border-slate-200 shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+        <div class="px-6 py-4 bg-slate-900 text-white flex items-center justify-between shrink-0">
+          <div class="flex items-center gap-2">
+            <i data-lucide="shield-check" class="w-5 h-5 text-emerald-400"></i>
+            <h3 class="font-display font-bold text-base">Controle de Participantes, Agregados & PINs</h3>
+          </div>
+          <button type="button" onclick="closePeopleModal()" class="text-slate-400 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+        </div>
+
+        <div class="p-5 sm:p-6 space-y-5 overflow-y-auto flex-1">
+          <!-- Adicionar Novo Participante / Agregado -->
+          <form onsubmit="addNewAggregate(event)" class="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
+            <div class="flex items-center justify-between">
+              <label class="text-xs font-bold text-slate-800">Adicionar Novo Participante ou Agregado</label>
+              <span class="text-[11px] text-slate-500">Ele mesmo criará o PIN no 1º acesso</span>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-4 gap-2">
+              <input type="text" id="new-agg-name" placeholder="Nome (ex: Lucas)" required class="sm:col-span-2 px-3 py-2 bg-white border border-slate-300 rounded-xl text-sm" />
+              <select id="new-agg-type" class="px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-700">
+                <option value="AGGREGATE">Agregado</option>
+                <option value="CORE">Fixo do Grupo</option>
+              </select>
+              <select id="new-agg-color" class="px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-700">
+                <option value="slate">Cor: Ardósia</option>
+                <option value="teal">Cor: Verde-Água</option>
+                <option value="cyan">Cor: Ciano</option>
+                <option value="orange">Cor: Laranja</option>
+                <option value="pink">Cor: Rosa</option>
+              </select>
+            </div>
+            <button type="submit" class="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5">
+              <i data-lucide="user-plus" class="w-4 h-4 text-emerald-400"></i>
+              <span>Cadastrar Participante (Aguardar 1º Acesso)</span>
+            </button>
+          </form>
+
+          <div>
+            <div class="flex items-center justify-between mb-2.5">
+              <p class="text-xs font-bold text-slate-700 uppercase tracking-wider">Gerenciamento de Acessos e Senhas (PIN)</p>
+              <span class="text-[11px] text-slate-500">Resetar força o usuário a criar um novo PIN</span>
+            </div>
+            <div id="people-list-container" class="space-y-2.5"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================================================
+       MODAL 4: ALTERAR MEU PRÓPRIO PIN
+  ========================================================== -->
+  <div id="change-pin-modal" class="fixed inset-0 z-50 hidden bg-slate-900/60 backdrop-blur-sm overflow-y-auto p-4">
+    <div class="min-h-full flex items-center justify-center">
+      <div class="bg-white rounded-3xl max-w-sm w-full border border-slate-200 shadow-2xl overflow-hidden">
+        <div class="px-6 py-4 bg-slate-900 text-white flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <i data-lucide="key-round" class="w-4 h-4 text-emerald-400"></i>
+            <h3 class="font-display font-bold text-sm">Alterar Meu PIN de Acesso</h3>
+          </div>
+          <button type="button" onclick="closeChangeMyPinModal()" class="text-slate-400 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+        </div>
+
+        <form onsubmit="handleChangeMyPinSubmit(event)" class="p-6 space-y-4">
+          <p class="text-xs text-slate-500">Defina uma nova senha numérica de <strong>4 dígitos</strong> para entrar no seu perfil.</p>
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">Novo PIN (4 números)</label>
+            <input type="password" id="my-new-pin" maxlength="4" inputmode="numeric" pattern="\d{4}" required placeholder="••••" class="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl text-sm font-bold tracking-widest focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">Confirmar Novo PIN</label>
+            <input type="password" id="my-confirm-pin" maxlength="4" inputmode="numeric" pattern="\d{4}" required placeholder="••••" class="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl text-sm font-bold tracking-widest focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+          </div>
+          <div class="pt-1 flex justify-end gap-2">
+            <button type="button" onclick="closeChangeMyPinModal()" class="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl">Cancelar</button>
+            <button type="submit" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-sm">Salvar Novo PIN</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================================================
+       MODAL 5: CONFIRMAÇÃO PARA ZERAR GASTOS
+  ========================================================== -->
+  <div id="confirm-clear-modal" class="fixed inset-0 z-50 hidden bg-slate-900/60 backdrop-blur-sm overflow-y-auto p-4">
+    <div class="min-h-full flex items-center justify-center">
+      <div class="bg-white rounded-3xl max-w-sm w-full border border-slate-200 shadow-2xl overflow-hidden p-6 space-y-4">
+        <div class="w-11 h-11 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center">
+          <i data-lucide="alert-triangle" class="w-6 h-6"></i>
+        </div>
+        <div>
+          <h3 class="font-display font-bold text-slate-900 text-base">Zerar todos os gastos?</h3>
+          <p class="text-xs text-slate-500 mt-1">
+            Todos os lançamentos e marcações de pagamento serão apagados. Os perfis e PINs cadastrados serão mantidos.
+          </p>
+        </div>
+        <div class="flex justify-end gap-2 pt-2">
+          <button type="button" onclick="closeConfirmClearModal()" class="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl">Cancelar</button>
+          <button type="button" onclick="confirmClearAllExpenses()" class="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-sm">Sim, Zerar Tudo</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================================================
+       MODAL 6: CONTESTAR LANÇAMENTO
+  ========================================================== -->
+  <div id="dispute-modal" class="fixed inset-0 z-50 hidden bg-slate-900/60 backdrop-blur-sm overflow-y-auto p-4">
+    <div class="min-h-full flex items-center justify-center">
+      <div class="bg-white rounded-3xl max-w-md w-full border border-slate-200 shadow-2xl overflow-hidden">
+        <div class="px-6 py-4 bg-slate-900 text-white flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <i data-lucide="flag" class="w-4 h-4 text-amber-400"></i>
+            <h3 class="font-display font-bold text-sm">Contestar Lançamento</h3>
+          </div>
+          <button type="button" onclick="closeDisputeModal()" class="text-slate-400 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+        </div>
+
+        <form onsubmit="submitDisputeForm(event)" class="p-6 space-y-4">
+          <input type="hidden" id="dispute-exp-id" />
+          <div class="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-1">
+            <span id="dispute-item-meta" class="text-[11px] font-semibold text-slate-500 block"></span>
+            <p id="dispute-item-desc" class="font-display font-bold text-slate-900 text-sm"></p>
+            <div class="flex items-center justify-between pt-1 text-xs">
+              <span class="text-slate-500">Valor atribuído a você:</span>
+              <strong id="dispute-item-share" class="text-emerald-700 font-extrabold tabular-nums"></strong>
+            </div>
+          </div>
+
+          <div>
+            <label for="dispute-reason" class="block text-xs font-bold text-slate-700 mb-1">Qual o motivo da contestação?</label>
+            <textarea
+              id="dispute-reason"
+              rows="3"
+              required
+              placeholder="Ex: Eu não participei desse rolê, ou o valor combinado comigo foi diferente..."
+              class="w-full p-3 border border-slate-300 rounded-xl text-xs focus:ring-2 focus:ring-amber-500 focus:outline-none"
+            ></textarea>
+          </div>
+
+          <div class="flex justify-end gap-2 pt-1">
+            <button type="button" onclick="closeDisputeModal()" class="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl">Cancelar</button>
+            <button type="submit" class="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-bold rounded-xl shadow-sm flex items-center gap-1.5">
+              <i data-lucide="flag" class="w-3.5 h-3.5"></i>
+              <span>Enviar Contestação</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================================================
+       MODAL 7: FOTO DE PERFIL DO PARTICIPANTE
+  ========================================================== -->
+  <div id="profile-photo-modal" class="fixed inset-0 z-50 hidden bg-slate-900/60 backdrop-blur-sm overflow-y-auto p-4">
+    <div class="min-h-full flex items-center justify-center">
+      <div class="bg-white rounded-3xl max-w-sm w-full border border-slate-200 shadow-2xl overflow-hidden">
+        <div class="px-6 py-4 bg-slate-900 text-white flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <i data-lucide="camera" class="w-4 h-4 text-emerald-400"></i>
+            <h3 class="font-display font-bold text-sm">Minha Foto de Perfil</h3>
+          </div>
+          <button type="button" onclick="closeProfilePhotoModal()" class="text-slate-400 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+        </div>
+
+        <div class="p-6 space-y-5 text-center">
+          <div class="flex flex-col items-center gap-2">
+            <div id="photo-modal-preview" class="w-24 h-24 rounded-full flex items-center justify-center font-display font-extrabold text-2xl shadow-md overflow-hidden border-2 border-slate-200"></div>
+            <p id="photo-modal-username" class="font-display font-bold text-slate-900 text-base"></p>
+            <p class="text-xs text-slate-500">Escolha uma imagem da galeria ou câmera para personalizar seu perfil.</p>
+          </div>
+
+          <input type="file" id="profile-photo-input" accept="image/*" onchange="handleProfilePhotoFile(event)" class="hidden" />
+
+          <div class="space-y-2">
+            <button
+              type="button"
+              onclick="document.getElementById('profile-photo-input').click()"
+              class="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-sm flex items-center justify-center gap-2 transition"
+            >
+              <i data-lucide="upload" class="w-4 h-4"></i>
+              <span>Escolher Imagem</span>
+            </button>
+
+            <button
+              type="button"
+              id="remove-profile-photo-btn"
+              onclick="removeProfilePhoto()"
+              class="hidden w-full py-2 px-4 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold rounded-xl transition"
+            >
+              Remover Foto (Usar Iniciais)
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================================================
+       JAVASCRIPT: ARQUITETURA, ESTADO, PARCELAMENTOS E UI
+  ========================================================== -->
+  <script>
+    const COLOR_PALETTES = {
+      emerald: { bg: 'bg-emerald-100', text: 'text-emerald-800', border: 'border-emerald-300', hex: '#10B981' },
+      indigo:  { bg: 'bg-indigo-100',  text: 'text-indigo-800',  border: 'border-indigo-300',  hex: '#6366F1' },
+      purple:  { bg: 'bg-purple-100',  text: 'text-purple-800',  border: 'border-purple-300',  hex: '#A855F7' },
+      amber:   { bg: 'bg-amber-100',   text: 'text-amber-800',   border: 'border-amber-300',   hex: '#F59E0B' },
+      rose:    { bg: 'bg-rose-100',    text: 'text-rose-800',    border: 'border-rose-300',    hex: '#F43F5E' },
+      sky:     { bg: 'bg-sky-100',     text: 'text-sky-800',     border: 'border-sky-300',     hex: '#0EA5E9' },
+      slate:   { bg: 'bg-slate-200',   text: 'text-slate-800',   border: 'border-slate-300',   hex: '#64748B' },
+      teal:    { bg: 'bg-teal-100',    text: 'text-teal-800',    border: 'border-teal-300',    hex: '#14B8A6' },
+      cyan:    { bg: 'bg-cyan-100',    text: 'text-cyan-800',    border: 'border-cyan-300',    hex: '#06B6D4' },
+      orange:  { bg: 'bg-orange-100',  text: 'text-orange-800',  border: 'border-orange-300',  hex: '#F97316' },
+      pink:    { bg: 'bg-pink-100',    text: 'text-pink-800',    border: 'border-pink-300',    hex: '#EC4899' }
+    };
+
+    const DEFAULT_USERS = [
+      { id: 'alisson', name: 'Alisson', role: 'ADMIN', isCore: true, pin: '1234', pinConfigured: true, blocked: false, colorName: 'purple', bg: 'bg-purple-100', text: 'text-purple-800', border: 'border-purple-300', hex: '#A855F7', pixKey: 'alisson.cartao@pix.com.br' },
+      { id: 'maria', name: 'Maria', role: 'MEMBER', isCore: true, pin: '', pinConfigured: false, blocked: false, colorName: 'indigo', bg: 'bg-indigo-100', text: 'text-indigo-800', border: 'border-indigo-300', hex: '#6366F1' },
+      { id: 'alessandra', name: 'Alessandra', role: 'MEMBER', isCore: true, pin: '', pinConfigured: false, blocked: false, colorName: 'pink', bg: 'bg-pink-100', text: 'text-pink-800', border: 'border-pink-300', hex: '#EC4899' },
+      { id: 'emillyn', name: 'Emillyn', role: 'MEMBER', isCore: true, pin: '', pinConfigured: false, blocked: false, colorName: 'rose', bg: 'bg-rose-100', text: 'text-rose-800', border: 'border-rose-300', hex: '#F43F5E' },
+      { id: 'eliton', name: 'Eliton', role: 'MEMBER', isCore: true, pin: '', pinConfigured: false, blocked: false, colorName: 'amber', bg: 'bg-amber-100', text: 'text-amber-800', border: 'border-amber-300', hex: '#F59E0B' },
+      { id: 'gabriel', name: 'Gabriel', role: 'MEMBER', isCore: true, pin: '', pinConfigured: false, blocked: false, colorName: 'sky', bg: 'bg-sky-100', text: 'text-sky-800', border: 'border-sky-300', hex: '#0EA5E9' },
+      { id: 'meri', name: 'Meri', role: 'MEMBER', isCore: true, pin: '', pinConfigured: false, blocked: false, colorName: 'cyan', bg: 'bg-cyan-100', text: 'text-cyan-800', border: 'border-cyan-300', hex: '#06B6D4' },
+      { id: 'sandrinho', name: 'Sandrinho', role: 'MEMBER', isCore: true, pin: '', pinConfigured: false, blocked: false, colorName: 'orange', bg: 'bg-orange-100', text: 'text-orange-800', border: 'border-orange-300', hex: '#F97316' },
+      { id: 'alex', name: 'Alex', role: 'MEMBER', isCore: true, pin: '', pinConfigured: false, blocked: false, colorName: 'teal', bg: 'bg-teal-100', text: 'text-teal-800', border: 'border-teal-300', hex: '#14B8A6' }
+    ];
+
+    const STORAGE_KEY_USERS = 'cartao_app_users_v4';
+    const STORAGE_KEY_EXPENSES = 'cartao_app_expenses_v4';
+    const STORAGE_KEY_PAYMENTS = 'cartao_app_payments_v4';
+    const STORAGE_KEY_PDF_TARGETS = 'cartao_app_pdf_targets_v1';
+    const STORAGE_KEY_DISPUTES = 'cartao_app_disputes_v1';
+
+    let evolutionChartInstance = null;
+    let distributionChartInstance = null;
+    let revealedPinsMap = {};
+
+    let state = {
+      users: [],
+      expenses: [],
+      payments: {},
+      pdfTargets: {},
+      disputes: [],
+      currentUser: null,
+      selectedProfileForLogin: null,
+      activeTab: 'sheet',
+      selectedMonth: '2026-11',
+      selectedCard: 'ALL',
+      editingExpenseId: null,
+      modalSplitMode: 'EQUAL',
+      modalLockedUsers: {},
+      wizardSplitMode: 'EQUAL',
+      wizardLockedUsers: {},
+      wizardQueue: [],
+      wizardDecisions: [],
+      wizardIndex: 0
+    };
+
+    // ---------------------------------------------------------
+    // UTILITÁRIOS DE FORMATAÇÃO E DATAS
+    // ---------------------------------------------------------
+    function refreshIcons() {
+      if (window.lucide) {
+        window.lucide.createIcons();
+      }
+    }
+
+    function renderUserAvatarInner(user) {
+      if (!user) return '';
+      if (user.avatar) {
+        return `<img src="${user.avatar}" alt="${user.name}" class="w-full h-full object-cover" />`;
+      }
+      return user.name.slice(0, 2).toUpperCase();
+    }
+
+    function formatBRL(value) {
+      const num = Number(value) || 0;
+      return num.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    }
+
+    function formatDateBR(isoDate) {
+      if (!isoDate || !isoDate.includes('-')) return isoDate || '';
+      const [y, m, d] = isoDate.split('-');
+      const months = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
+      const mLabel = months[parseInt(m, 10) - 1] || m;
+      return `${d}/${mLabel}`;
+    }
+
+    function formatMonthLabel(ym) {
+      const [y, m] = ym.split('-').map(Number);
+      const date = new Date(y, m - 1, 1);
+      return date.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+    }
+
+    function addMonthsToYM(ym, offset) {
+      const [y, m] = ym.split('-').map(Number);
+      const d = new Date(y, m - 1 + offset, 1);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    }
+
+    function getMonthDiff(startYM, targetYM) {
+      const [sy, sm] = startYM.split('-').map(Number);
+      const [ty, tm] = targetYM.split('-').map(Number);
+      return (ty - sy) * 12 + (tm - sm);
+    }
+
+    function parsePlanilhaDate(rawDate, refYear = '2026') {
+      const clean = String(rawDate || '').trim().toUpperCase();
+      const monthMap = {
+        JAN: '01', FEV: '02', MAR: '03', ABR: '04', MAI: '05', JUN: '06',
+        JUL: '07', AGO: '08', SET: '09', OUT: '10', NOV: '11', DEZ: '12'
+      };
+      const parts = clean.split(/[\/\-\s]+/).filter(Boolean);
+      if (parts.length >= 2) {
+        const day = parts[0].padStart(2, '0');
+        const mToken = parts[1];
+        const month = monthMap[mToken] || mToken.padStart(2, '0');
+        const year = parts[2] ? (parts[2].length === 2 ? `20${parts[2]}` : parts[2]) : refYear;
+        if (/^\d{2}$/.test(day) && /^\d{2}$/.test(month)) {
+          return `${year}-${month}-${day}`;
+        }
+      }
+      return `${state.selectedMonth}-15`;
+    }
+
+    function resolveCardLabel(cardToken, fallbackCard = 'Cartão 1') {
+      const t = String(cardToken || '').trim().toUpperCase();
+      if (t.includes('2') && t.includes('CART')) return 'Cartão 2';
+      if (t.includes('1') && t.includes('CART')) return 'Cartão 1';
+      return fallbackCard;
+    }
+
+    // ---------------------------------------------------------
+    // PERSISTÊNCIA E INICIALIZAÇÃO
+    // ---------------------------------------------------------
+    function loadAllData() {
+      try {
+        const savedUsers = JSON.parse(localStorage.getItem(STORAGE_KEY_USERS) || 'null');
+        if (Array.isArray(savedUsers) && savedUsers.length > 0) {
+          // Remove o usuário fictício antigo 'agregado_rafa' e sincroniza cores/participantes
+          const merged = savedUsers
+            .filter(u => u.id !== 'agregado_rafa')
+            .map(u => {
+              const def = DEFAULT_USERS.find(d => d.id === u.id);
+              if (def) {
+                return {
+                  ...u,
+                  colorName: def.colorName,
+                  bg: def.bg,
+                  text: def.text,
+                  border: def.border,
+                  hex: def.hex
+                };
+              }
+              return u;
+            });
+          DEFAULT_USERS.forEach(def => {
+            if (!merged.some(u => u.id === def.id)) {
+              merged.push({ ...def });
+            }
+          });
+          state.users = merged;
+        } else {
+          state.users = DEFAULT_USERS.map(u => ({ ...u }));
+        }
+
+        const savedExpenses = JSON.parse(localStorage.getItem(STORAGE_KEY_EXPENSES) || 'null');
+        state.expenses = Array.isArray(savedExpenses) ? savedExpenses : [];
+
+        const savedPayments = JSON.parse(localStorage.getItem(STORAGE_KEY_PAYMENTS) || 'null');
+        state.payments = savedPayments && typeof savedPayments === 'object' ? savedPayments : {};
+
+        const savedTargets = JSON.parse(localStorage.getItem(STORAGE_KEY_PDF_TARGETS) || 'null');
+        state.pdfTargets = savedTargets && typeof savedTargets === 'object' ? savedTargets : {};
+
+        const savedDisputes = JSON.parse(localStorage.getItem(STORAGE_KEY_DISPUTES) || 'null');
+        state.disputes = Array.isArray(savedDisputes) ? savedDisputes : [];
+      } catch (err) {
+        state.users = DEFAULT_USERS.map(u => ({ ...u }));
+        state.expenses = [];
+        state.payments = {};
+        state.pdfTargets = {};
+        state.disputes = [];
+      }
+    }
+
+    function saveAllData() {
+      localStorage.setItem(STORAGE_KEY_USERS, JSON.stringify(state.users));
+      localStorage.setItem(STORAGE_KEY_EXPENSES, JSON.stringify(state.expenses));
+      localStorage.setItem(STORAGE_KEY_PAYMENTS, JSON.stringify(state.payments));
+      localStorage.setItem(STORAGE_KEY_PDF_TARGETS, JSON.stringify(state.pdfTargets));
+      localStorage.setItem(STORAGE_KEY_DISPUTES, JSON.stringify(state.disputes));
+    }
+
+    function initApp() {
+      loadAllData();
+      renderLoginProfiles();
+      refreshIcons();
+    }
+
+    // ---------------------------------------------------------
+    // AUTENTICAÇÃO, 1º ACESSO E ALTERAÇÃO DE PIN
+    // ---------------------------------------------------------
+    function renderLoginProfiles() {
+      const grid = document.getElementById('login-profiles-grid');
+      if (!grid) return;
+
+      grid.innerHTML = state.users.map(u => {
+        const isSelected = state.selectedProfileForLogin && state.selectedProfileForLogin.id === u.id;
+        return `
+          <button
+            type="button"
+            onclick="selectProfileForLogin('${u.id}')"
+            class="p-3 rounded-2xl border text-center transition flex flex-col items-center gap-1.5 ${
+              isSelected
+                ? 'border-emerald-500 bg-emerald-50/70 ring-2 ring-emerald-500/30'
+                : 'border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50'
+            } ${u.blocked ? 'opacity-50' : ''}"
+          >
+            <div class="w-11 h-11 rounded-full ${u.bg} ${u.text} flex items-center justify-center font-display font-extrabold text-sm shadow-sm overflow-hidden">
+              ${renderUserAvatarInner(u)}
+            </div>
+            <span class="text-xs font-bold text-slate-900 truncate max-w-full">${u.name}</span>
+            <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+              u.blocked
+                ? 'bg-rose-100 text-rose-700'
+                : (!u.pinConfigured ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-600')
+            }">
+              ${u.blocked ? 'Bloqueado' : (!u.pinConfigured ? '1º Acesso' : (u.role === 'ADMIN' ? 'Admin' : 'Entrar'))}
+            </span>
+          </button>
+        `;
+      }).join('');
+    }
+
+    function selectProfileForLogin(userId) {
+      const user = state.users.find(u => u.id === userId);
+      if (!user) return;
+
+      if (user.blocked) {
+        showToast('Este perfil está temporariamente bloqueado pelo Administrador.', 'error');
+        return;
+      }
+
+      state.selectedProfileForLogin = user;
+      renderLoginProfiles();
+
+      const box = document.getElementById('login-pin-box');
+      const avatar = document.getElementById('selected-user-avatar');
+      const nameEl = document.getElementById('selected-user-name');
+      const roleEl = document.getElementById('selected-user-role');
+      const loginForm = document.getElementById('login-form');
+      const firstForm = document.getElementById('first-access-form');
+      const errEl = document.getElementById('login-error');
+
+      box.classList.remove('hidden');
+      errEl.classList.add('hidden');
+
+      avatar.className = `w-10 h-10 rounded-full ${user.bg} ${user.text} flex items-center justify-center font-bold text-sm overflow-hidden`;
+      avatar.innerHTML = renderUserAvatarInner(user);
+      nameEl.textContent = user.name;
+      roleEl.textContent = user.role === 'ADMIN' ? 'Administrador da Fatura' : 'Participante';
+
+      if (!user.pinConfigured) {
+        loginForm.classList.add('hidden');
+        firstForm.classList.remove('hidden');
+        document.getElementById('new-pin-input').value = '';
+        document.getElementById('confirm-pin-input').value = '';
+        setTimeout(() => document.getElementById('new-pin-input').focus(), 50);
+      } else {
+        firstForm.classList.add('hidden');
+        loginForm.classList.remove('hidden');
+        document.getElementById('pin-input').value = '';
+        setTimeout(() => document.getElementById('pin-input').focus(), 50);
+      }
+      refreshIcons();
+    }
+
+    function cancelPinSelection() {
+      state.selectedProfileForLogin = null;
+      document.getElementById('login-pin-box').classList.add('hidden');
+      renderLoginProfiles();
+    }
+
+    function handleLoginSubmit(e) {
+      e.preventDefault();
+      const user = state.selectedProfileForLogin;
+      if (!user) return;
+      const entered = document.getElementById('pin-input').value.trim();
+      const errEl = document.getElementById('login-error');
+
+      if (entered === user.pin) {
+        errEl.classList.add('hidden');
+        completeLogin(user);
+      } else {
+        errEl.textContent = 'PIN incorreto. Tente novamente ou peça ao Alisson para resetar.';
+        errEl.classList.remove('hidden');
+      }
+    }
+
+    function handleFirstAccessSubmit(e) {
+      e.preventDefault();
+      const user = state.selectedProfileForLogin;
+      if (!user) return;
+      const p1 = document.getElementById('new-pin-input').value.trim();
+      const p2 = document.getElementById('confirm-pin-input').value.trim();
+      const errEl = document.getElementById('login-error');
+
+      if (!/^\d{4}$/.test(p1)) {
+        errEl.textContent = 'O PIN deve conter exatamente 4 números.';
+        errEl.classList.remove('hidden');
+        return;
+      }
+      if (p1 !== p2) {
+        errEl.textContent = 'Os dois PINs digitados não são iguais.';
+        errEl.classList.remove('hidden');
+        return;
+      }
+
+      const idx = state.users.findIndex(u => u.id === user.id);
+      if (idx !== -1) {
+        state.users[idx].pin = p1;
+        state.users[idx].pinConfigured = true;
+        saveAllData();
+        completeLogin(state.users[idx]);
+        showToast('PIN cadastrado com sucesso! Bem-vindo(a)!', 'success');
+      }
+    }
+
+    function completeLogin(user) {
+      state.currentUser = user;
+      state.activeTab = 'sheet';
+      document.getElementById('auth-screen').classList.add('hidden');
+      document.getElementById('app-shell').classList.remove('hidden');
+
+      updateHeaderUserUI();
+
+      renderMainTabs();
+      renderCurrentView();
+      refreshIcons();
+    }
+
+    function updateHeaderUserUI() {
+      const user = state.currentUser;
+      if (!user) return;
+      const hAvatar = document.getElementById('header-user-avatar');
+      hAvatar.className = `w-8 h-8 rounded-full ${user.bg} ${user.text} flex items-center justify-center font-bold text-xs shrink-0 overflow-hidden`;
+      hAvatar.innerHTML = renderUserAvatarInner(user);
+
+      document.getElementById('header-user-name').textContent = user.name;
+      const badge = document.getElementById('header-role-badge');
+      if (user.role === 'ADMIN') {
+        badge.className = 'text-[11px] font-semibold px-2 py-0.5 rounded-full bg-purple-100 text-purple-800';
+        badge.textContent = 'Administrador';
+      } else {
+        badge.className = `text-[11px] font-semibold px-2 py-0.5 rounded-full ${user.bg} ${user.text}`;
+        badge.textContent = 'Participante';
+      }
+    }
+
+    function openProfilePhotoModal() {
+      const user = state.currentUser;
+      if (!user) return;
+      const preview = document.getElementById('photo-modal-preview');
+      const nameEl = document.getElementById('photo-modal-username');
+      const removeBtn = document.getElementById('remove-profile-photo-btn');
+      const fileInp = document.getElementById('profile-photo-input');
+
+      if (fileInp) fileInp.value = '';
+      preview.className = `w-24 h-24 rounded-full ${user.bg} ${user.text} flex items-center justify-center font-display font-extrabold text-2xl shadow-md overflow-hidden border-2 border-slate-200`;
+      preview.innerHTML = renderUserAvatarInner(user);
+      nameEl.textContent = user.name;
+      removeBtn.classList.toggle('hidden', !user.avatar);
+
+      document.getElementById('profile-photo-modal').classList.remove('hidden');
+      refreshIcons();
+    }
+
+    function closeProfilePhotoModal() {
+      document.getElementById('profile-photo-modal').classList.add('hidden');
+    }
+
+    function handleProfilePhotoFile(event) {
+      const file = event.target.files && event.target.files[0];
+      if (!file || !state.currentUser) return;
+
+      if (!file.type.startsWith('image/')) {
+        showToast('Selecione um arquivo de imagem válido (JPG, PNG, WebP).', 'error');
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const maxSize = 200;
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height) {
+            if (width > maxSize) {
+              height = Math.round((height * maxSize) / width);
+              width = maxSize;
+            }
+          } else {
+            if (height > maxSize) {
+              width = Math.round((width * maxSize) / height);
+              height = maxSize;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+
+          const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.82);
+          const idx = state.users.findIndex(u => u.id === state.currentUser.id);
+          if (idx !== -1) {
+            state.users[idx].avatar = compressedDataUrl;
+            state.currentUser = state.users[idx];
+            saveAllData();
+            updateHeaderUserUI();
+            openProfilePhotoModal();
+            renderCurrentView();
+            showToast('Foto de perfil atualizada com sucesso!', 'success');
+          }
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function removeProfilePhoto() {
+      if (!state.currentUser) return;
+      const idx = state.users.findIndex(u => u.id === state.currentUser.id);
+      if (idx !== -1) {
+        delete state.users[idx].avatar;
+        state.currentUser = state.users[idx];
+        saveAllData();
+        updateHeaderUserUI();
+        openProfilePhotoModal();
+        renderCurrentView();
+        showToast('Foto removida. Voltamos para suas iniciais.', 'success');
+      }
+    }
+
+    function openChangeMyPinModal() {
+      if (!state.currentUser) return;
+      document.getElementById('my-new-pin').value = '';
+      document.getElementById('my-confirm-pin').value = '';
+      document.getElementById('change-pin-modal').classList.remove('hidden');
+      refreshIcons();
+      setTimeout(() => document.getElementById('my-new-pin').focus(), 50);
+    }
+
+    function closeChangeMyPinModal() {
+      document.getElementById('change-pin-modal').classList.add('hidden');
+    }
+
+    function handleChangeMyPinSubmit(e) {
+      e.preventDefault();
+      if (!state.currentUser) return;
+      const p1 = document.getElementById('my-new-pin').value.trim();
+      const p2 = document.getElementById('my-confirm-pin').value.trim();
+
+      if (!/^\d{4}$/.test(p1)) {
+        showToast('O novo PIN deve ter exatamente 4 dígitos numéricos.', 'error');
+        return;
+      }
+      if (p1 !== p2) {
+        showToast('Os dois PINs digitados não conferem.', 'error');
+        return;
+      }
+
+      const idx = state.users.findIndex(u => u.id === state.currentUser.id);
+      if (idx !== -1) {
+        state.users[idx].pin = p1;
+        state.users[idx].pinConfigured = true;
+        state.currentUser = state.users[idx];
+        saveAllData();
+        closeChangeMyPinModal();
+        showToast('Seu PIN foi alterado com sucesso!', 'success');
+      }
+    }
+
+    function logout() {
+      state.currentUser = null;
+      state.selectedProfileForLogin = null;
+      document.getElementById('app-shell').classList.add('hidden');
+      document.getElementById('auth-screen').classList.remove('hidden');
+      document.getElementById('login-pin-box').classList.add('hidden');
+      renderLoginProfiles();
+      refreshIcons();
+    }
+
+    // ---------------------------------------------------------
+    // NAVEGAÇÃO, FILTROS E CÁLCULO DE PARCELAS
+    // ---------------------------------------------------------
+    function renderMainTabs() {
+      const nav = document.getElementById('main-tabs');
+      const isAdmin = state.currentUser && state.currentUser.role === 'ADMIN';
+      const openDisputesCount = state.disputes.filter(d => d.status === 'OPEN').length;
+      const tabs = [
+        { id: 'sheet', label: 'Minha Planilha', icon: 'table' },
+        { id: 'transparency', label: 'Como foi dividido', icon: 'eye' },
+        { id: 'charts', label: 'Gráficos & Evolução', icon: 'bar-chart-3' }
+      ];
+      if (isAdmin) {
+        tabs.push({ id: 'disputes', label: 'Contestações', icon: 'flag', badge: openDisputesCount });
+        tabs.push({ id: 'admin', label: 'Painel Admin & Fatura', icon: 'shield' });
+      }
+
+      nav.innerHTML = tabs.map(t => {
+        const active = state.activeTab === t.id;
+        return `
+          <button
+            type="button"
+            onclick="switchTab('${t.id}')"
+            class="px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 whitespace-nowrap transition ${
+              active
+                ? 'bg-slate-900 text-white shadow-sm'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            }"
+          >
+            <i data-lucide="${t.icon}" class="w-4 h-4 ${active ? 'text-emerald-400' : ''}"></i>
+            <span>${t.label}</span>
+            ${t.badge > 0 ? `<span class="text-[10px] font-extrabold px-1.5 py-0.5 rounded-full ${active ? 'bg-amber-400 text-slate-950' : 'bg-amber-100 text-amber-800'}">${t.badge}</span>` : ''}
+          </button>
+        `;
+      }).join('');
+    }
+
+    function switchTab(tabId) {
+      state.activeTab = tabId;
+      renderMainTabs();
+      renderCurrentView();
+      refreshIcons();
+    }
+
+    function changeMonth(delta) {
+      state.selectedMonth = addMonthsToYM(state.selectedMonth, delta);
+      renderCurrentView();
+    }
+
+    function setCardFilter(cardValue) {
+      state.selectedCard = cardValue;
+      renderCurrentView();
+    }
+
+    function getItemsForMonth(ym, cardFilter = 'ALL') {
+      const items = [];
+      state.expenses.forEach(exp => {
+        if (cardFilter !== 'ALL' && exp.card !== cardFilter) return;
+        const startYM = exp.date.slice(0, 7);
+        const diff = getMonthDiff(startYM, ym);
+        const totalInst = exp.installments || 1;
+
+        if (diff >= 0 && diff < totalInst) {
+          const currentInst = diff + 1;
+          const monthlyTotal = exp.totalAmount / totalInst;
+          items.push({
+            ...exp,
+            currentInstallment: currentInst,
+            totalInstallments: totalInst,
+            monthlyTotal
+          });
+        }
+      });
+      return items.sort((a, b) => a.date.localeCompare(b.date));
+    }
+
+    function getUserShareForExpense(item, userId) {
+      if (!item.participants || !item.participants.includes(userId)) return 0;
+      const totalInst = item.totalInstallments || item.installments || 1;
+      if (item.splitType === 'CUSTOM' && item.customSplits && item.customSplits[userId] !== undefined) {
+        return Number(item.customSplits[userId]) / totalInst;
+      }
+      const monthly = item.monthlyTotal !== undefined ? item.monthlyTotal : (item.totalAmount / totalInst);
+      return monthly / item.participants.length;
+    }
+
+    function renderCurrentView() {
+      if (!state.currentUser) return;
+      const isAdmin = state.currentUser.role === 'ADMIN';
+      if (!isAdmin && (state.activeTab === 'disputes' || state.activeTab === 'admin')) {
+        state.activeTab = 'sheet';
+      }
+
+      document.getElementById('current-month-label').textContent = formatMonthLabel(state.selectedMonth);
+      renderMainTabs();
+
+      ['sheet', 'transparency', 'disputes', 'charts', 'admin'].forEach(id => {
+        const el = document.getElementById(`tab-${id}`);
+        if (el) el.classList.toggle('hidden', state.activeTab !== id);
+      });
+
+      if (state.activeTab === 'sheet') renderParticipantSheetTab();
+      else if (state.activeTab === 'transparency') renderTransparencyTab();
+      else if (state.activeTab === 'disputes' && isAdmin) renderDisputesTab();
+      else if (state.activeTab === 'charts') renderChartsTab();
+      else if (state.activeTab === 'admin' && isAdmin) renderAdminTab();
+
+      refreshIcons();
+    }
+
+    // ---------------------------------------------------------
+    // ABA 1: MINHA PLANILHA
+    // ---------------------------------------------------------
+    function renderParticipantSheetTab() {
+      const user = state.currentUser;
+      const isAdmin = user.role === 'ADMIN';
+      const ym = state.selectedMonth;
+      const search = (document.getElementById('sheet-search')?.value || '').toLowerCase().trim();
+
+      const kpiGrid = document.getElementById('participant-kpis-grid');
+      const adminPixCard = document.getElementById('admin-pix-card');
+      if (kpiGrid && adminPixCard) {
+        if (isAdmin) {
+          kpiGrid.className = 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4';
+          adminPixCard.classList.remove('hidden');
+          adminPixCard.classList.add('flex');
+        } else {
+          kpiGrid.className = 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4';
+          adminPixCard.classList.add('hidden');
+          adminPixCard.classList.remove('flex');
+        }
+      }
+
+      document.getElementById('sheet-user-title').textContent = user.name;
+
+      const allMonthItems = getItemsForMonth(ym, state.selectedCard);
+      const myItems = allMonthItems.filter(it => it.participants && it.participants.includes(user.id));
+      const filteredItems = search
+        ? myItems.filter(it => it.description.toLowerCase().includes(search))
+        : myItems;
+
+      const myTotal = myItems.reduce((sum, it) => sum + getUserShareForExpense(it, user.id), 0);
+
+      // Comparação com mês anterior
+      const prevYM = addMonthsToYM(ym, -1);
+      const prevItems = getItemsForMonth(prevYM, state.selectedCard).filter(it => it.participants && it.participants.includes(user.id));
+      const prevTotal = prevItems.reduce((sum, it) => sum + getUserShareForExpense(it, user.id), 0);
+
+      document.getElementById('kpi-my-total').textContent = formatBRL(myTotal);
+      const diffEl = document.getElementById('kpi-my-diff');
+      if (prevTotal === 0) {
+        diffEl.textContent = 'Sem gastos registrados no mês anterior';
+        diffEl.className = 'text-xs mt-1.5 font-medium text-slate-500';
+      } else {
+        const pct = ((myTotal - prevTotal) / prevTotal) * 100;
+        if (pct > 0.5) {
+          diffEl.textContent = `▲ +${pct.toFixed(1)}% em relação a ${formatMonthLabel(prevYM)}`;
+          diffEl.className = 'text-xs mt-1.5 font-semibold text-rose-600';
+        } else if (pct < -0.5) {
+          diffEl.textContent = `▼ ${pct.toFixed(1)}% (economia vs ${formatMonthLabel(prevYM)})`;
+          diffEl.className = 'text-xs mt-1.5 font-semibold text-emerald-600';
+        } else {
+          diffEl.textContent = `Estável em relação a ${formatMonthLabel(prevYM)}`;
+          diffEl.className = 'text-xs mt-1.5 font-medium text-slate-500';
+        }
+      }
+
+      const payKey = `${ym}_${user.id}`;
+      const isPaid = !!state.payments[payKey];
+      document.getElementById('kpi-my-status').textContent = myTotal === 0 ? 'Sem Pendências' : (isPaid ? 'Pago ✓' : 'Pendente');
+      document.getElementById('kpi-my-status').className = `font-display text-2xl font-extrabold ${
+        myTotal === 0 ? 'text-slate-700' : (isPaid ? 'text-emerald-600' : 'text-amber-600')
+      }`;
+      document.getElementById('kpi-my-status-sub').textContent = isPaid
+        ? 'Acerto confirmado pelo Alisson'
+        : 'Aguardando fechamento/transferência';
+
+      const parceladosCount = myItems.filter(it => it.totalInstallments > 1).length;
+      document.getElementById('kpi-my-count').textContent = `${myItems.length} ${myItems.length === 1 ? 'item' : 'itens'}`;
+      document.getElementById('kpi-my-installments').textContent = `${parceladosCount} parcelado(s) neste mês`;
+
+      // Banner de status
+      const banner = document.getElementById('month-status-banner');
+      if (myItems.length === 0) {
+        banner.className = 'rounded-2xl p-4 border border-slate-200 bg-white flex flex-col sm:flex-row sm:items-center justify-between gap-3';
+        banner.innerHTML = `
+          <div class="flex items-center gap-3">
+            <div class="w-9 h-9 rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center shrink-0"><i data-lucide="calendar" class="w-4 h-4"></i></div>
+            <div>
+              <p class="text-xs sm:text-sm font-bold text-slate-800">Nenhum gasto lançado para ${user.name} em ${formatMonthLabel(ym)}</p>
+              <p class="text-xs text-slate-500">Assim que o Alisson anexar a fatura e dividir os itens, sua planilha aparecerá aqui automaticamente.</p>
+            </div>
+          </div>
+        `;
+      } else {
+        banner.className = `rounded-2xl p-4 border ${user.border} ${user.bg} flex flex-col sm:flex-row sm:items-center justify-between gap-3`;
+        banner.innerHTML = `
+          <div class="flex items-center gap-3">
+            <div class="w-9 h-9 rounded-xl bg-white/80 ${user.text} flex items-center justify-center font-bold text-xs shrink-0 overflow-hidden">${renderUserAvatarInner(user)}</div>
+            <div>
+              <p class="text-xs sm:text-sm font-bold ${user.text}">Planilha Individual de ${user.name} • ${formatMonthLabel(ym)}</p>
+              <p class="text-xs text-slate-700">Você participa de <strong>${myItems.length}</strong> compra(s) neste mês. Clique em "Como foi dividido" para ver os detalhes do rateio.</p>
+            </div>
+          </div>
+        `;
+      }
+
+      const tbody = document.getElementById('participant-sheet-body');
+      const tfoot = document.getElementById('participant-sheet-foot');
+
+      if (filteredItems.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="8" class="py-10 px-4 text-center text-xs sm:text-sm text-slate-400">
+              Nenhum lançamento encontrado para este filtro.
+            </td>
+          </tr>
+        `;
+        tfoot.innerHTML = '';
+        return;
+      }
+
+      tbody.innerHTML = filteredItems.map(it => {
+        const myShare = getUserShareForExpense(it, user.id);
+        const isRefund = it.monthlyTotal < 0 || myShare < 0;
+        const isCustom = it.splitType === 'CUSTOM';
+        const pctShare = it.monthlyTotal !== 0 ? Math.round((myShare / it.monthlyTotal) * 100) : 0;
+        const openDispute = state.disputes.find(d => d.expenseId === it.id && d.userId === user.id && d.status === 'OPEN');
+
+        return `
+          <tr class="${openDispute ? 'bg-amber-50/60' : (isRefund ? 'bg-cyan-50/50 hover:bg-cyan-50' : 'hover:bg-slate-50/90')} transition">
+            <td class="py-3 px-4 text-xs font-semibold ${isRefund ? 'text-cyan-800' : 'text-slate-600'} whitespace-nowrap">${formatDateBR(it.date)}</td>
+            <td class="py-3 px-4 font-semibold ${isRefund ? 'text-cyan-950' : 'text-slate-900'}">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span>${it.description}</span>
+                ${isRefund ? '<span class="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full bg-cyan-100 text-cyan-800 border border-cyan-300">Reembolso / Desconto</span>' : ''}
+                ${openDispute ? '<span class="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300">Contestado</span>' : ''}
+              </div>
+            </td>
+            <td class="py-3 px-4 text-xs text-slate-600 whitespace-nowrap">${it.card}</td>
+            <td class="py-3 px-4 text-center">
+              <span class="text-[11px] font-bold px-2 py-0.5 rounded-md ${it.totalInstallments > 1 ? 'bg-indigo-50 text-indigo-700' : 'bg-slate-100 text-slate-600'}">
+                ${it.totalInstallments > 1 ? `${it.currentInstallment}/${it.totalInstallments}` : '1x'}
+              </span>
+            </td>
+            <td class="py-3 px-4 text-right text-xs ${isRefund ? 'font-bold text-cyan-700' : 'text-slate-600'} tabular-nums">${formatBRL(it.monthlyTotal)}</td>
+            <td class="py-3 px-4 text-center">
+              ${isCustom
+                ? `<span class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-purple-100 text-purple-800">Acordado (${pctShare}%)</span>`
+                : `<span class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">1/${it.participants.length} igual</span>`
+              }
+            </td>
+            <td class="py-3 px-4 text-right font-extrabold ${isRefund ? 'text-cyan-700 bg-cyan-100/60' : 'text-emerald-800 bg-emerald-50/40'} tabular-nums">${formatBRL(myShare)}</td>
+            <td class="py-3 px-4 text-center whitespace-nowrap">
+              ${user.role !== 'ADMIN' ? (
+                openDispute
+                  ? `<span class="text-[11px] font-bold text-amber-700">Em análise</span>`
+                  : `<button type="button" onclick="openDisputeModal('${it.id}')" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-200 transition" title="Contestar este valor">
+                      <i data-lucide="flag" class="w-3 h-3"></i>
+                      <span>Contestar</span>
+                    </button>`
+              ) : '<span class="text-[11px] text-slate-400">—</span>'}
+            </td>
+          </tr>
+        `;
+      }).join('');
+
+      tfoot.innerHTML = `
+        <tr>
+          <td colspan="6" class="py-3.5 px-4 text-right text-xs uppercase tracking-wider text-slate-300">Total a Pagar (${user.name})</td>
+          <td class="py-3.5 px-4 text-right text-base text-emerald-400 tabular-nums">${formatBRL(myTotal)}</td>
+          <td></td>
+        </tr>
+      `;
+    }
+
+    // ---------------------------------------------------------
+    // ABA 2: TRANSPARÊNCIA ("COMO FOI DIVIDIDO")
+    // ---------------------------------------------------------
+    function renderTransparencyTab() {
+      const user = state.currentUser;
+      const items = getItemsForMonth(state.selectedMonth, state.selectedCard)
+        .filter(it => it.participants && it.participants.includes(user.id));
+
+      const grid = document.getElementById('transparency-cards-grid');
+      if (items.length === 0) {
+        grid.innerHTML = `
+          <div class="col-span-full py-12 text-center text-sm text-slate-400">
+            Nenhuma compra compartilhada encontrada para ${user.name} em ${formatMonthLabel(state.selectedMonth)}.
+          </div>
+        `;
+        return;
+      }
+
+      grid.innerHTML = items.map(it => {
+        const myShare = getUserShareForExpense(it, user.id);
+        const isRefund = it.monthlyTotal < 0 || myShare < 0;
+        const isCustom = it.splitType === 'CUSTOM';
+        const badges = it.participants.map(pid => {
+          const pUser = state.users.find(u => u.id === pid);
+          const pName = pUser ? pUser.name : pid;
+          const pShare = getUserShareForExpense(it, pid);
+          const bg = isRefund ? 'bg-cyan-100' : (pUser ? pUser.bg : 'bg-slate-100');
+          const text = isRefund ? 'text-cyan-900' : (pUser ? pUser.text : 'text-slate-700');
+          return `
+            <span class="inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-xl ${bg} ${text}">
+              <span>${pName}</span>
+              <span class="opacity-85">• ${formatBRL(pShare)}</span>
+            </span>
+          `;
+        }).join('');
+
+        return `
+          <div class="rounded-2xl border ${isRefund ? 'border-cyan-300 bg-cyan-50/40' : 'border-slate-200 bg-slate-50/50'} p-4 sm:p-5 space-y-3">
+            <div class="flex items-start justify-between gap-3">
+              <div>
+                <span class="text-[11px] font-semibold ${isRefund ? 'text-cyan-700' : 'text-slate-500'}">${formatDateBR(it.date)} • ${it.card} • ${it.totalInstallments > 1 ? `Parcela ${it.currentInstallment}/${it.totalInstallments}` : 'À vista'}</span>
+                <h4 class="font-display font-bold ${isRefund ? 'text-cyan-950' : 'text-slate-900'} text-base mt-0.5">${it.description}</h4>
+              </div>
+              <span class="text-[11px] font-bold px-2.5 py-1 rounded-full ${isRefund ? 'bg-cyan-100 text-cyan-800 border border-cyan-300' : (isCustom ? 'bg-purple-100 text-purple-800' : 'bg-emerald-100 text-emerald-800')}">
+                ${isRefund ? 'Reembolso / Desconto' : (isCustom ? 'Valor Acordado' : `Dividido por ${it.participants.length}`)}
+              </span>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2 bg-white p-3 rounded-xl border ${isRefund ? 'border-cyan-200' : 'border-slate-200/80'} text-xs">
+              <div>
+                <span class="text-slate-500 block">${isRefund ? 'Crédito / Estorno no Mês' : 'Valor Real no Mês'}</span>
+                <span class="font-extrabold ${isRefund ? 'text-cyan-700' : 'text-slate-900'} text-sm tabular-nums">${formatBRL(it.monthlyTotal)}</span>
+              </div>
+              <div class="text-right">
+                <span class="text-slate-500 block">${isRefund ? `Seu Desconto (${user.name})` : `Sua Parte (${user.name})`}</span>
+                <span class="font-extrabold ${isRefund ? 'text-cyan-700' : 'text-emerald-700'} text-sm tabular-nums">${formatBRL(myShare)}</span>
+              </div>
+            </div>
+
+            <div>
+              <p class="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">Participantes neste rateio:</p>
+              <div class="flex flex-wrap gap-1.5">${badges}</div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // ---------------------------------------------------------
+    // ABA 2B: CONTESTAÇÕES
+    // ---------------------------------------------------------
+    function openDisputeModal(expenseId) {
+      if (!state.currentUser) return;
+      const monthItems = getItemsForMonth(state.selectedMonth, 'ALL');
+      const item = monthItems.find(e => e.id === expenseId) || state.expenses.find(e => e.id === expenseId);
+      if (!item) return;
+
+      const myShare = getUserShareForExpense(item, state.currentUser.id);
+      document.getElementById('dispute-exp-id').value = item.id;
+      document.getElementById('dispute-item-meta').textContent = `${formatDateBR(item.date)} • ${item.card}`;
+      document.getElementById('dispute-item-desc').textContent = item.description;
+      document.getElementById('dispute-item-share').textContent = formatBRL(myShare);
+      document.getElementById('dispute-reason').value = '';
+      document.getElementById('dispute-modal').classList.remove('hidden');
+      refreshIcons();
+    }
+
+    function closeDisputeModal() {
+      document.getElementById('dispute-modal').classList.add('hidden');
+    }
+
+    function submitDisputeForm(e) {
+      e.preventDefault();
+      if (!state.currentUser) return;
+      const expenseId = document.getElementById('dispute-exp-id').value;
+      const reason = document.getElementById('dispute-reason').value.trim();
+      if (!reason) return;
+
+      const monthItems = getItemsForMonth(state.selectedMonth, 'ALL');
+      const item = monthItems.find(x => x.id === expenseId) || state.expenses.find(x => x.id === expenseId);
+      if (!item) return;
+
+      const shareAmount = getUserShareForExpense(item, state.currentUser.id);
+
+      state.disputes.unshift({
+        id: 'disp-' + Date.now(),
+        expenseId: item.id,
+        month: state.selectedMonth,
+        date: item.date,
+        card: item.card,
+        description: item.description,
+        totalMonthlyAmount: item.monthlyTotal !== undefined ? item.monthlyTotal : (item.totalAmount / (item.installments || 1)),
+        disputedAmount: shareAmount,
+        userId: state.currentUser.id,
+        userName: state.currentUser.name,
+        reason,
+        status: 'OPEN',
+        createdAt: new Date().toLocaleDateString('pt-BR')
+      });
+
+      saveAllData();
+      closeDisputeModal();
+      renderCurrentView();
+      showToast('Contestação registrada! O Alisson poderá revisar na aba Contestações.', 'success');
+    }
+
+    function resolveDispute(disputeId) {
+      const idx = state.disputes.findIndex(d => d.id === disputeId);
+      if (idx === -1) return;
+      state.disputes[idx].status = 'RESOLVED';
+      saveAllData();
+      renderCurrentView();
+      showToast('Contestação marcada como resolvida!', 'success');
+    }
+
+    function renderDisputesTab() {
+      const container = document.getElementById('disputes-list-container');
+      if (!container) return;
+
+      const isAdmin = state.currentUser && state.currentUser.role === 'ADMIN';
+
+      if (!state.disputes || state.disputes.length === 0) {
+        container.innerHTML = `
+          <div class="py-14 px-4 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+            <div class="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto mb-3">
+              <i data-lucide="check-circle-2" class="w-6 h-6"></i>
+            </div>
+            <h3 class="font-display font-bold text-slate-900 text-base">Nenhuma contestação registrada</h3>
+            <p class="text-xs sm:text-sm text-slate-500 mt-1 max-w-md mx-auto">
+              Até o momento não há nenhuma contestação. Caso algum participante discorde de algum valor lançado, ele aparecerá aqui.
+            </p>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = `
+        <div class="space-y-3">
+          ${state.disputes.map(d => {
+            const pUser = state.users.find(u => u.id === d.userId);
+            const isOpen = d.status === 'OPEN';
+            return `
+              <div class="p-4 sm:p-5 rounded-2xl border ${isOpen ? 'border-amber-300 bg-amber-50/40' : 'border-slate-200 bg-slate-50/60 opacity-80'} flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                <div class="space-y-1.5 flex-1">
+                  <div class="flex flex-wrap items-center gap-2">
+                    <span class="inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-0.5 rounded-full ${pUser ? `${pUser.bg} ${pUser.text}` : 'bg-slate-200 text-slate-800'}">
+                      Contestado por: ${d.userName}
+                    </span>
+                    <span class="text-[11px] font-bold px-2 py-0.5 rounded-full ${isOpen ? 'bg-amber-100 text-amber-800 border border-amber-300' : 'bg-emerald-100 text-emerald-800'}">
+                      ${isOpen ? 'Aguardando Revisão' : 'Resolvido ✓'}
+                    </span>
+                    <span class="text-[11px] text-slate-400">• ${formatDateBR(d.date)} • ${d.card}</span>
+                  </div>
+
+                  <h4 class="font-display font-bold text-slate-900 text-base">${d.description}</h4>
+                  <p class="text-xs text-slate-700 bg-white p-2.5 rounded-xl border border-slate-200/80">
+                    <strong>Motivo:</strong> "${d.reason}"
+                  </p>
+                </div>
+
+                <div class="flex flex-col sm:flex-row lg:flex-col items-start sm:items-center lg:items-end justify-between gap-3 shrink-0 border-t lg:border-t-0 pt-3 lg:pt-0 border-slate-200/80">
+                  <div class="lg:text-right">
+                    <span class="text-[11px] text-slate-500 block">Valor Contestado (${d.userName})</span>
+                    <span class="font-display text-lg font-extrabold text-amber-800 tabular-nums">${formatBRL(d.disputedAmount)}</span>
+                    <span class="text-[11px] text-slate-400 block">Valor total do item: ${formatBRL(d.totalMonthlyAmount)}</span>
+                  </div>
+
+                  ${isAdmin && isOpen ? `
+                    <div class="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onclick="openEditExpenseModal('${d.expenseId}')"
+                        class="px-3 py-1.5 rounded-xl bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 text-xs font-bold transition"
+                      >
+                        Editar Lançamento
+                      </button>
+                      <button
+                        type="button"
+                        onclick="resolveDispute('${d.id}')"
+                        class="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition"
+                      >
+                        Marcar Resolvido
+                      </button>
+                    </div>
+                  ` : ''}
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      `;
+    }
+
+    // ---------------------------------------------------------
+    // ABA 3: GRÁFICOS & EVOLUÇÃO
+    // ---------------------------------------------------------
+    function renderChartsTab() {
+      const user = state.currentUser;
+      const months = [-2, -1, 0, 1, 2, 3].map(offset => addMonthsToYM(state.selectedMonth, offset));
+      const values = months.map(ym => {
+        const items = getItemsForMonth(ym, state.selectedCard).filter(it => it.participants && it.participants.includes(user.id));
+        return Number(items.reduce((sum, it) => sum + getUserShareForExpense(it, user.id), 0).toFixed(2));
+      });
+
+      const currentVal = values[2];
+      const prevVal = values[1];
+      const badge = document.getElementById('chart-trend-badge');
+      if (prevVal === 0) {
+        badge.className = 'inline-flex items-center gap-1 text-xs font-bold px-3 py-1.5 rounded-full bg-slate-100 text-slate-600';
+        badge.textContent = 'Base inicial';
+      } else {
+        const diffPct = ((currentVal - prevVal) / prevVal) * 100;
+        if (diffPct > 0) {
+          badge.className = 'inline-flex items-center gap-1 text-xs font-bold px-3 py-1.5 rounded-full bg-rose-100 text-rose-700';
+          badge.textContent = `▲ +${diffPct.toFixed(1)}% vs mês anterior`;
+        } else {
+          badge.className = 'inline-flex items-center gap-1 text-xs font-bold px-3 py-1.5 rounded-full bg-emerald-100 text-emerald-700';
+          badge.textContent = `▼ ${diffPct.toFixed(1)}% vs mês anterior`;
+        }
+      }
+
+      const ctx1 = document.getElementById('evolutionChart');
+      if (ctx1 && window.Chart) {
+        if (evolutionChartInstance) evolutionChartInstance.destroy();
+        evolutionChartInstance = new Chart(ctx1, {
+          type: 'bar',
+          data: {
+            labels: months.map(formatMonthLabel),
+            datasets: [{
+              label: `Gastos de ${user.name} (R$)`,
+              data: values,
+              backgroundColor: months.map(m => m === state.selectedMonth ? (user.hex || '#10B981') : '#CBD5E1'),
+              borderRadius: 10
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+              y: { beginAtZero: true }
+            }
+          }
+        });
+      }
+
+      // Gráfico Secundário: Cartão 1 vs Cartão 2
+      const c1Items = getItemsForMonth(state.selectedMonth, 'Cartão 1').filter(it => it.participants && it.participants.includes(user.id));
+      const c2Items = getItemsForMonth(state.selectedMonth, 'Cartão 2').filter(it => it.participants && it.participants.includes(user.id));
+      const c1Total = Number(c1Items.reduce((s, it) => s + getUserShareForExpense(it, user.id), 0).toFixed(2));
+      const c2Total = Number(c2Items.reduce((s, it) => s + getUserShareForExpense(it, user.id), 0).toFixed(2));
+
+      const ctx2 = document.getElementById('distributionChart');
+      if (ctx2 && window.Chart) {
+        if (distributionChartInstance) distributionChartInstance.destroy();
+        distributionChartInstance = new Chart(ctx2, {
+          type: 'doughnut',
+          data: {
+            labels: ['Cartão 1', 'Cartão 2'],
+            datasets: [{
+              data: [c1Total, c2Total],
+              backgroundColor: [user.hex || '#A855F7', '#0F172A'],
+              borderWidth: 0
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '68%',
+            plugins: { legend: { display: false } }
+          }
+        });
+      }
+
+      document.getElementById('chart-secondary-legend').innerHTML = `
+        <div class="flex items-center justify-between">
+          <span class="font-semibold text-slate-600">Cartão 1 (Principal)</span>
+          <span class="font-bold text-slate-900 tabular-nums">${formatBRL(c1Total)}</span>
+        </div>
+        <div class="flex items-center justify-between">
+          <span class="font-semibold text-slate-600">Cartão 2 (Secundário)</span>
+          <span class="font-bold text-slate-900 tabular-nums">${formatBRL(c2Total)}</span>
+        </div>
+      `;
+
+      document.getElementById('monthly-comparison-strip').innerHTML = months.map((ym, i) => `
+        <div class="p-3 rounded-2xl border ${ym === state.selectedMonth ? 'border-emerald-400 bg-emerald-50/60' : 'border-slate-200 bg-slate-50'}">
+          <span class="text-[11px] font-bold text-slate-500 capitalize block">${formatMonthLabel(ym)}</span>
+          <span class="font-display font-extrabold text-sm text-slate-900 tabular-nums mt-1 block">${formatBRL(values[i])}</span>
+        </div>
+      `).join('');
+    }
+
+    // ---------------------------------------------------------
+    // ABA 4: PAINEL ADMINISTRATIVO (EXCLUSIVO ALISSON)
+    // ---------------------------------------------------------
+    function renderAdminTab() {
+      const ym = state.selectedMonth;
+      document.getElementById('admin-settlement-month').textContent = formatMonthLabel(ym);
+
+      const monthItems = getItemsForMonth(ym, state.selectedCard);
+      const purchasesTotal = monthItems.filter(it => it.monthlyTotal > 0).reduce((s, it) => s + it.monthlyTotal, 0);
+      const refundsTotal = monthItems.filter(it => it.monthlyTotal < 0).reduce((s, it) => s + it.monthlyTotal, 0);
+      const rawTotal = purchasesTotal + refundsTotal;
+
+      document.getElementById('admin-raw-total').textContent = formatBRL(rawTotal);
+      const elPurch = document.getElementById('admin-check-purchases');
+      const elRef = document.getElementById('admin-check-refunds');
+      const elNet = document.getElementById('admin-check-net');
+      if (elPurch) elPurch.textContent = formatBRL(purchasesTotal);
+      if (elRef) elRef.textContent = formatBRL(refundsTotal);
+      if (elNet) elNet.textContent = formatBRL(rawTotal);
+
+      const targetInput = document.getElementById('admin-pdf-target-input');
+      const savedTarget = state.pdfTargets[ym];
+      if (targetInput) {
+        targetInput.value = savedTarget !== undefined && savedTarget !== null && savedTarget !== '' ? savedTarget : '';
+      }
+      updateAdminPdfDiffBadge(rawTotal, savedTarget);
+
+      // Grid de Acerto por Participante
+      const settlementGrid = document.getElementById('admin-settlement-grid');
+      settlementGrid.innerHTML = state.users.map(u => {
+        const userTotal = monthItems.reduce((s, it) => s + getUserShareForExpense(it, u.id), 0);
+        const payKey = `${ym}_${u.id}`;
+        const isPaid = !!state.payments[payKey];
+        const isAdmin = u.role === 'ADMIN';
+
+        return `
+          <div class="bg-white rounded-2xl border ${u.border} p-4 shadow-sm flex flex-col justify-between gap-3">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2.5">
+                <span class="w-9 h-9 rounded-full ${u.bg} ${u.text} flex items-center justify-center font-bold text-xs overflow-hidden shrink-0">${renderUserAvatarInner(u)}</span>
+                <div>
+                  <h4 class="font-display font-bold text-slate-900 text-sm">${u.name}</h4>
+                  <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full ${u.bg} ${u.text}">${isAdmin ? 'Admin' : (u.isCore ? 'Fixo' : 'Agregado')}</span>
+                </div>
+              </div>
+              ${!isAdmin && userTotal > 0 ? `
+                <button
+                  type="button"
+                  onclick="toggleUserPaymentStatus('${u.id}')"
+                  class="text-[11px] font-bold px-2.5 py-1 rounded-full border transition ${
+                    isPaid
+                      ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                      : 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100'
+                  }"
+                >
+                  ${isPaid ? 'Pago ✓' : 'Marcar Pago'}
+                </button>
+              ` : ''}
+            </div>
+
+            <div>
+              <span class="text-[11px] text-slate-500 block">Total no mês</span>
+              <span class="font-display text-xl font-extrabold text-slate-900 tabular-nums">${formatBRL(userTotal)}</span>
+            </div>
+
+            ${!isAdmin && userTotal > 0 ? `
+              <button
+                type="button"
+                onclick="copyWhatsAppBilling('${u.id}')"
+                class="w-full py-2 px-3 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition"
+              >
+                <i data-lucide="message-circle" class="w-3.5 h-3.5 text-emerald-400"></i>
+                <span>Cobrar WhatsApp</span>
+              </button>
+            ` : `<div class="text-[11px] text-slate-400 text-center py-1">${isAdmin ? 'Titular dos cartões' : 'Sem saldo a cobrar'}</div>`}
+          </div>
+        `;
+      }).join('');
+
+      // Tabela Bruta Completa
+      const rawBody = document.getElementById('admin-raw-table-body');
+      if (monthItems.length === 0) {
+        rawBody.innerHTML = `
+          <tr>
+            <td colspan="7" class="py-10 px-4 text-center text-xs sm:text-sm text-slate-400">
+              Nenhum lançamento cadastrado para ${formatMonthLabel(ym)}. Clique em "Importar Fatura (PDF / CSV)" ou "Lançar Compra Manual".
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
+      rawBody.innerHTML = monthItems.map(it => {
+        const isRefund = it.monthlyTotal < 0;
+        const isCustom = it.splitType === 'CUSTOM';
+        const badges = (it.participants || []).map(pid => {
+          const u = state.users.find(x => x.id === pid);
+          const name = u ? u.name : pid;
+          const share = getUserShareForExpense(it, pid);
+          const bg = isRefund ? 'bg-cyan-100' : (u ? u.bg : 'bg-slate-100');
+          const text = isRefund ? 'text-cyan-900' : (u ? u.text : 'text-slate-700');
+          return `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${bg} ${text}">${name}${isCustom ? ` (${formatBRL(share)})` : ''}</span>`;
+        }).join(' ');
+
+        return `
+          <tr class="${isRefund ? 'bg-cyan-50/50 hover:bg-cyan-50' : 'hover:bg-slate-50'} transition">
+            <td class="py-3 px-4 text-xs font-semibold ${isRefund ? 'text-cyan-800' : 'text-slate-600'} whitespace-nowrap">${formatDateBR(it.date)}</td>
+            <td class="py-3 px-4 font-semibold ${isRefund ? 'text-cyan-950' : 'text-slate-900'}">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span>${it.description}</span>
+                ${isRefund ? '<span class="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full bg-cyan-100 text-cyan-800 border border-cyan-300">Reembolso</span>' : ''}
+              </div>
+            </td>
+            <td class="py-3 px-4 text-xs text-slate-600 whitespace-nowrap">${it.card}</td>
+            <td class="py-3 px-4 text-center">
+              <span class="text-[11px] font-bold px-2 py-0.5 rounded-md ${it.totalInstallments > 1 ? 'bg-indigo-50 text-indigo-700' : 'bg-slate-100 text-slate-600'}">
+                ${it.totalInstallments > 1 ? `${it.currentInstallment}/${it.totalInstallments}` : '1x'}
+              </span>
+            </td>
+            <td class="py-3 px-4 text-right font-extrabold ${isRefund ? 'text-cyan-700' : 'text-slate-900'} tabular-nums">${formatBRL(it.monthlyTotal)}</td>
+            <td class="py-3 px-4">
+              <div class="flex flex-wrap gap-1">${badges}</div>
+            </td>
+            <td class="py-3 px-4 text-right whitespace-nowrap">
+              <button type="button" onclick="openEditExpenseModal('${it.id}')" title="Editar divisão ou valor" class="p-1.5 text-slate-500 hover:text-indigo-600 rounded-lg hover:bg-indigo-50 transition">
+                <i data-lucide="pencil" class="w-4 h-4"></i>
+              </button>
+              <button type="button" onclick="deleteExpense('${it.id}')" title="Excluir lançamento" class="p-1.5 text-slate-500 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition">
+                <i data-lucide="trash-2" class="w-4 h-4"></i>
+              </button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function handleAdminPdfTargetChange(val) {
+      const ym = state.selectedMonth;
+      if (val === '' || val === null) {
+        delete state.pdfTargets[ym];
+      } else {
+        state.pdfTargets[ym] = parseFloat(val);
+      }
+      saveAllData();
+      const monthItems = getItemsForMonth(ym, state.selectedCard);
+      const rawTotal = monthItems.reduce((s, it) => s + it.monthlyTotal, 0);
+      updateAdminPdfDiffBadge(rawTotal, state.pdfTargets[ym]);
+    }
+
+    function updateAdminPdfDiffBadge(systemNet, pdfTarget) {
+      const badge = document.getElementById('admin-pdf-diff-badge');
+      if (!badge) return;
+      if (pdfTarget === undefined || pdfTarget === null || isNaN(pdfTarget)) {
+        badge.className = 'text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-800 text-slate-300';
+        badge.textContent = 'Informe p/ conferir';
+        return;
+      }
+      const diff = Number((systemNet - pdfTarget).toFixed(2));
+      if (Math.abs(diff) <= 0.02) {
+        badge.className = 'text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30';
+        badge.textContent = 'Bateu 100% com o PDF ✓';
+      } else if (diff < 0) {
+        badge.className = 'text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-400/30';
+        badge.textContent = `Falta ${formatBRL(Math.abs(diff))}`;
+      } else {
+        badge.className = 'text-[11px] font-bold px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-400/30';
+        badge.textContent = `Passou ${formatBRL(diff)}`;
+      }
+    }
+
+    function toggleUserPaymentStatus(userId) {
+      const key = `${state.selectedMonth}_${userId}`;
+      state.payments[key] = !state.payments[key];
+      saveAllData();
+      renderCurrentView();
+      showToast(state.payments[key] ? 'Pagamento confirmado!' : 'Marcado como pendente.', 'success');
+    }
+
+    function copyTextFallback(text, successMsg) {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      showToast(successMsg, 'success');
+    }
+
+    function copyAlissonPix() {
+      const admin = state.users.find(u => u.role === 'ADMIN');
+      const pix = admin?.pixKey || 'alisson.cartao@pix.com.br';
+      copyTextFallback(pix, `Chave PIX copiada: ${pix}`);
+    }
+
+    function copyWhatsAppBilling(userId) {
+      const user = state.users.find(u => u.id === userId);
+      if (!user) return;
+      const ym = state.selectedMonth;
+      const items = getItemsForMonth(ym, state.selectedCard).filter(it => it.participants && it.participants.includes(userId));
+      const total = items.reduce((s, it) => s + getUserShareForExpense(it, userId), 0);
+      const admin = state.users.find(u => u.role === 'ADMIN');
+
+      const lines = items.map(it => {
+        const share = getUserShareForExpense(it, userId);
+        const parc = it.totalInstallments > 1 ? ` (${it.currentInstallment}/${it.totalInstallments})` : '';
+        return `• ${formatDateBR(it.date)} - ${it.description}${parc}: *${formatBRL(share)}*`;
+      });
+
+      const msg = `Olá *${user.name}*! Segue o resumo da sua parte no cartão referente a *${formatMonthLabel(ym)}*:\n\n${lines.join('\n')}\n\n*Total a pagar: ${formatBRL(total)}*\nPIX Alisson: ${admin?.pixKey || 'alisson.cartao@pix.com.br'}`;
+      copyTextFallback(msg, `Resumo de ${user.name} copiado para o WhatsApp!`);
+    }
+
+    function requestClearAllExpenses() {
+      document.getElementById('confirm-clear-modal').classList.remove('hidden');
+      refreshIcons();
+    }
+
+    function closeConfirmClearModal() {
+      document.getElementById('confirm-clear-modal').classList.add('hidden');
+    }
+
+    function confirmClearAllExpenses() {
+      state.expenses = [];
+      state.payments = {};
+      saveAllData();
+      closeConfirmClearModal();
+      renderCurrentView();
+      showToast('Todos os gastos foram zerados!', 'success');
+    }
+
+    // ---------------------------------------------------------
+    // MODAL DE LANÇAMENTO E EDIÇÃO MANUAL
+    // ---------------------------------------------------------
+    function openNewExpenseModal() {
+      state.editingExpenseId = null;
+      state.modalSplitMode = 'EQUAL';
+      state.modalLockedUsers = {};
+      document.getElementById('expense-modal-title').textContent = 'Lançar Nova Compra na Fatura';
+      document.getElementById('exp-id').value = '';
+      document.getElementById('exp-date').value = `${state.selectedMonth}-15`;
+      document.getElementById('exp-card').value = 'Cartão 1';
+      document.getElementById('exp-desc').value = '';
+      document.getElementById('exp-amount').value = '';
+      document.getElementById('exp-installments').value = '1';
+      updateModalSplitModeButtons();
+      renderModalParticipantsCheckboxes(state.users.filter(u => u.isCore).map(u => u.id), {});
+      updateModalSplitPreview();
+      document.getElementById('expense-modal').classList.remove('hidden');
+      refreshIcons();
+    }
+
+    function openEditExpenseModal(id) {
+      const exp = state.expenses.find(e => e.id === id);
+      if (!exp) return;
+      state.editingExpenseId = id;
+      state.modalSplitMode = exp.splitType === 'CUSTOM' ? 'CUSTOM' : 'EQUAL';
+      state.modalLockedUsers = {};
+      if (state.modalSplitMode === 'CUSTOM' && exp.participants) {
+        exp.participants.forEach(uid => { state.modalLockedUsers[uid] = true; });
+      }
+      document.getElementById('expense-modal-title').textContent = 'Editar Compra da Fatura';
+      document.getElementById('exp-id').value = exp.id;
+      document.getElementById('exp-date').value = exp.date;
+      document.getElementById('exp-card').value = exp.card;
+      document.getElementById('exp-desc').value = exp.description;
+      document.getElementById('exp-amount').value = exp.totalAmount;
+      document.getElementById('exp-installments').value = String(exp.installments);
+      updateModalSplitModeButtons();
+      renderModalParticipantsCheckboxes(exp.participants || [], exp.customSplits || {});
+      updateModalSplitPreview();
+      document.getElementById('expense-modal').classList.remove('hidden');
+      refreshIcons();
+    }
+
+    function distributeEqualCents(total, userIds) {
+      const result = {};
+      if (!userIds || userIds.length === 0 || total === 0) {
+        (userIds || []).forEach(id => { result[id] = 0; });
+        return result;
+      }
+      const sign = total < 0 ? -1 : 1;
+      const totalCents = Math.round(Math.abs(total) * 100);
+      const baseCents = Math.floor(totalCents / userIds.length);
+      let remainder = totalCents - baseCents * userIds.length;
+      userIds.forEach(id => {
+        const extra = remainder > 0 ? 1 : 0;
+        if (remainder > 0) remainder--;
+        result[id] = Number((sign * (baseCents + extra) / 100).toFixed(2));
+      });
+      return result;
+    }
+
+    function handleModalTotalAmountChange() {
+      if (state.modalSplitMode === 'CUSTOM') {
+        const checked = Array.from(document.querySelectorAll('input[name="exp-participant"]:checked')).map(el => el.value);
+        const totalVal = parseFloat(document.getElementById('exp-amount').value) || 0;
+        state.modalLockedUsers = {};
+        const splits = distributeEqualCents(totalVal, checked);
+        renderModalParticipantsCheckboxes(checked, splits);
+      }
+      updateModalSplitPreview();
+    }
+
+    function setModalSplitMode(mode) {
+      const currentChecked = Array.from(document.querySelectorAll('input[name="exp-participant"]:checked')).map(el => el.value);
+      const totalVal = parseFloat(document.getElementById('exp-amount').value) || 0;
+      state.modalLockedUsers = {};
+
+      let initialSplits = {};
+      if (mode === 'CUSTOM' && totalVal !== 0 && currentChecked.length > 0) {
+        initialSplits = distributeEqualCents(totalVal, currentChecked);
+      }
+
+      state.modalSplitMode = mode;
+      updateModalSplitModeButtons();
+      renderModalParticipantsCheckboxes(currentChecked, initialSplits);
+      updateModalSplitPreview();
+    }
+
+    function updateModalSplitModeButtons() {
+      const btnEqual = document.getElementById('exp-split-mode-equal');
+      const btnCustom = document.getElementById('exp-split-mode-custom');
+      if (!btnEqual || !btnCustom) return;
+
+      if (state.modalSplitMode === 'EQUAL') {
+        btnEqual.className = 'py-1.5 px-2.5 rounded-lg text-xs font-bold bg-white text-slate-900 shadow-sm transition';
+        btnCustom.className = 'py-1.5 px-2.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 transition';
+      } else {
+        btnCustom.className = 'py-1.5 px-2.5 rounded-lg text-xs font-bold bg-white text-indigo-700 shadow-sm transition';
+        btnEqual.className = 'py-1.5 px-2.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 transition';
+      }
+    }
+
+    function closeExpenseModal() {
+      document.getElementById('expense-modal').classList.add('hidden');
+    }
+
+    function renderModalParticipantsCheckboxes(selectedIds, customSplits = {}) {
+      const container = document.getElementById('exp-participants-checkboxes');
+      const isCustom = state.modalSplitMode === 'CUSTOM';
+      const rawTotal = parseFloat(document.getElementById('exp-amount').value);
+      const hasTotal = !isNaN(rawTotal) && rawTotal !== 0;
+      const isNegative = hasTotal && rawTotal < 0;
+
+      container.innerHTML = state.users.map(u => {
+        const checked = selectedIds.includes(u.id);
+        const val = customSplits[u.id] !== undefined ? Number(customSplits[u.id]).toFixed(2) : '';
+        return `
+          <div class="flex items-center justify-between gap-2 p-2 rounded-xl border ${checked ? (isNegative ? 'border-cyan-300 bg-cyan-50/50' : 'border-emerald-300 bg-emerald-50/40') : 'border-slate-200 bg-white'}">
+            <label class="flex items-center gap-2 cursor-pointer text-xs font-semibold flex-1 min-w-0">
+              <input type="checkbox" name="exp-participant" value="${u.id}" ${checked ? 'checked' : ''} onchange="handleModalParticipantToggle('${u.id}', this.checked)" class="rounded text-emerald-600 focus:ring-emerald-500" />
+              <span class="truncate">${u.name}</span>
+            </label>
+            ${isCustom ? `
+              <div class="flex items-center gap-1 shrink-0">
+                <span class="text-[10px] font-bold text-slate-400">R$</span>
+                <input
+                  type="number"
+                  step="0.01"
+                  ${hasTotal ? (isNegative ? `min="${rawTotal}" max="0"` : `min="0" max="${rawTotal}"`) : ''}
+                  data-exp-custom-user="${u.id}"
+                  value="${checked ? val : ''}"
+                  ${checked ? '' : 'disabled'}
+                  oninput="handleModalCustomInput('${u.id}')"
+                  placeholder="0.00"
+                  class="w-20 px-2 py-1 text-right text-xs font-bold border border-slate-300 rounded-lg bg-white disabled:bg-slate-100 disabled:text-slate-400 tabular-nums focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                />
+              </div>
+            ` : ''}
+          </div>
+        `;
+      }).join('');
+    }
+
+    function handleModalCustomInput(changedUserId) {
+      const totalVal = parseFloat(document.getElementById('exp-amount').value) || 0;
+      const isNegative = totalVal < 0;
+      const checked = Array.from(document.querySelectorAll('input[name="exp-participant"]:checked')).map(el => el.value);
+      const changedInp = document.querySelector(`input[data-exp-custom-user="${changedUserId}"]`);
+      if (!changedInp) return;
+
+      let enteredVal = parseFloat(changedInp.value);
+      if (isNaN(enteredVal)) enteredVal = 0;
+
+      if (isNegative) {
+        if (enteredVal > 0) enteredVal = -Math.abs(enteredVal);
+        if (enteredVal < totalVal) enteredVal = totalVal;
+        changedInp.value = enteredVal.toFixed(2);
+      } else {
+        if (enteredVal < 0) enteredVal = 0;
+        if (totalVal > 0 && enteredVal > totalVal) {
+          enteredVal = totalVal;
+          changedInp.value = enteredVal.toFixed(2);
+        }
+      }
+
+      state.modalLockedUsers[changedUserId] = true;
+
+      const otherChecked = checked.filter(id => id !== changedUserId);
+      if (otherChecked.length > 0 && totalVal !== 0) {
+        let unlockedOthers = otherChecked.filter(id => !state.modalLockedUsers[id]);
+        if (unlockedOthers.length === 0) {
+          otherChecked.forEach(id => { delete state.modalLockedUsers[id]; });
+          unlockedOthers = otherChecked;
+        }
+
+        const lockedOthersSum = otherChecked
+          .filter(id => !unlockedOthers.includes(id))
+          .reduce((sum, id) => {
+            const inp = document.querySelector(`input[data-exp-custom-user="${id}"]`);
+            return sum + (parseFloat(inp?.value) || 0);
+          }, 0);
+
+        if (isNegative) {
+          const minAllowedForChanged = Math.min(0, Number((totalVal - lockedOthersSum).toFixed(2)));
+          if (enteredVal < minAllowedForChanged) {
+            enteredVal = minAllowedForChanged;
+            changedInp.value = enteredVal.toFixed(2);
+          }
+          const remaining = Math.min(0, Number((totalVal - lockedOthersSum - enteredVal).toFixed(2)));
+          const redistributed = distributeEqualCents(remaining, unlockedOthers);
+          unlockedOthers.forEach(id => {
+            const inp = document.querySelector(`input[data-exp-custom-user="${id}"]`);
+            if (inp) inp.value = redistributed[id].toFixed(2);
+          });
+        } else {
+          const maxAllowedForChanged = Math.max(0, Number((totalVal - lockedOthersSum).toFixed(2)));
+          if (enteredVal > maxAllowedForChanged) {
+            enteredVal = maxAllowedForChanged;
+            changedInp.value = enteredVal.toFixed(2);
+          }
+          const remaining = Math.max(0, Number((totalVal - lockedOthersSum - enteredVal).toFixed(2)));
+          const redistributed = distributeEqualCents(remaining, unlockedOthers);
+          unlockedOthers.forEach(id => {
+            const inp = document.querySelector(`input[data-exp-custom-user="${id}"]`);
+            if (inp) inp.value = redistributed[id].toFixed(2);
+          });
+        }
+      }
+
+      updateModalSplitPreview();
+    }
+
+    function handleModalParticipantToggle(userId, isChecked) {
+      const checked = Array.from(document.querySelectorAll('input[name="exp-participant"]:checked')).map(el => el.value);
+      if (!isChecked) delete state.modalLockedUsers[userId];
+
+      if (state.modalSplitMode === 'CUSTOM') {
+        const totalVal = parseFloat(document.getElementById('exp-amount').value) || 0;
+        state.modalLockedUsers = {};
+        const splits = distributeEqualCents(totalVal, checked);
+        renderModalParticipantsCheckboxes(checked, splits);
+      } else {
+        renderModalParticipantsCheckboxes(checked, {});
+      }
+      updateModalSplitPreview();
+    }
+
+    function selectPresetParticipants(preset) {
+      let ids = [];
+      if (preset === 'ADMIN') ids = ['alisson'];
+      else if (preset === 'ALL') ids = state.users.map(u => u.id);
+      else if (preset === 'NONE') ids = [];
+      else ids = state.users.filter(u => u.isCore).map(u => u.id);
+
+      state.modalLockedUsers = {};
+      const totalVal = parseFloat(document.getElementById('exp-amount').value) || 0;
+      const splits = state.modalSplitMode === 'CUSTOM' ? distributeEqualCents(totalVal, ids) : {};
+      renderModalParticipantsCheckboxes(ids, splits);
+      updateModalSplitPreview();
+    }
+
+    function updateModalSplitPreview() {
+      const amount = parseFloat(document.getElementById('exp-amount').value) || 0;
+      const inst = parseInt(document.getElementById('exp-installments').value, 10) || 1;
+      const checked = Array.from(document.querySelectorAll('input[name="exp-participant"]:checked')).map(el => el.value);
+      const count = checked.length;
+      const preview = document.getElementById('exp-split-preview');
+      const isNegative = amount < 0;
+
+      if (amount === 0 || count === 0) {
+        preview.className = 'bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-xs text-emerald-900';
+        preview.textContent = 'Selecione ao menos 1 participante e informe o valor (positivo para compra ou negativo para reembolso).';
+        return;
+      }
+
+      if (state.modalSplitMode === 'CUSTOM') {
+        let sumCustom = 0;
+        checked.forEach(uid => {
+          const inp = document.querySelector(`input[data-exp-custom-user="${uid}"]`);
+          sumCustom += parseFloat(inp?.value) || 0;
+        });
+        const diff = Number((amount - sumCustom).toFixed(2));
+        if (Math.abs(diff) <= 0.02) {
+          preview.className = isNegative
+            ? 'bg-cyan-50 border border-cyan-300 rounded-xl p-3 text-xs text-cyan-950'
+            : 'bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-xs text-emerald-900';
+          preview.innerHTML = `${isNegative ? 'Reembolso/Desconto fechado' : 'Soma fechada perfeitamente'}: <strong>${formatBRL(sumCustom)}</strong> de <strong>${formatBRL(amount)}</strong> (${inst}x).`;
+        } else {
+          preview.className = 'bg-amber-50 border border-amber-300 rounded-xl p-3 text-xs text-amber-950';
+          preview.innerHTML = `Atribuído: <strong>${formatBRL(sumCustom)}</strong> de <strong>${formatBRL(amount)}</strong> • Diferença de <strong>${formatBRL(diff)}</strong>.`;
+        }
+        return;
+      }
+
+      const monthly = amount / inst;
+      const perPerson = monthly / count;
+      preview.className = isNegative
+        ? 'bg-cyan-50 border border-cyan-300 rounded-xl p-3 text-xs text-cyan-950'
+        : 'bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-xs text-emerald-900';
+      preview.innerHTML = `${isNegative ? 'Desconto/Reembolso mensal' : 'Parcela mensal'}: <strong>${formatBRL(monthly)}</strong> (${inst}x) • Dividido para <strong>${count} pessoa(s)</strong> = <strong>${formatBRL(perPerson)}</strong> por pessoa/mês.`;
+    }
+
+    function saveExpenseForm(e) {
+      e.preventDefault();
+      const participants = Array.from(document.querySelectorAll('input[name="exp-participant"]:checked')).map(el => el.value);
+      if (participants.length === 0) {
+        showToast('Selecione pelo menos 1 participante para dividir.', 'error');
+        return;
+      }
+
+      const totalAmount = parseFloat(document.getElementById('exp-amount').value);
+      const splitType = state.modalSplitMode;
+      let customSplits = null;
+
+      if (splitType === 'CUSTOM') {
+        customSplits = {};
+        let sumCustom = 0;
+        participants.forEach(uid => {
+          const inp = document.querySelector(`input[data-exp-custom-user="${uid}"]`);
+          const val = parseFloat(inp?.value) || 0;
+          customSplits[uid] = val;
+          sumCustom += val;
+        });
+
+        if (Math.abs(totalAmount - sumCustom) > 0.05) {
+          showToast(`A soma dos valores (${formatBRL(sumCustom)}) deve ser igual ao total (${formatBRL(totalAmount)}).`, 'error');
+          return;
+        }
+      }
+
+      const data = {
+        id: state.editingExpenseId || 'exp-' + Date.now(),
+        date: document.getElementById('exp-date').value,
+        card: document.getElementById('exp-card').value,
+        description: document.getElementById('exp-desc').value.trim(),
+        totalAmount,
+        installments: parseInt(document.getElementById('exp-installments').value, 10) || 1,
+        participants,
+        splitType,
+        customSplits
+      };
+
+      if (state.editingExpenseId) {
+        const idx = state.expenses.findIndex(x => x.id === state.editingExpenseId);
+        if (idx !== -1) state.expenses[idx] = data;
+      } else {
+        state.expenses.push(data);
+      }
+
+      saveAllData();
+      closeExpenseModal();
+      renderCurrentView();
+      showToast('Compra salva na fatura!', 'success');
+    }
+
+    function deleteExpense(id) {
+      state.expenses = state.expenses.filter(e => e.id !== id);
+      saveAllData();
+      renderCurrentView();
+      showToast('Lançamento removido.', 'success');
+    }
+
+    // ---------------------------------------------------------
+    // IMPORTADOR DE FATURA (PDF / CSV) & ASSISTENTE
+    // ---------------------------------------------------------
+    function openImportWizardModal() {
+      document.getElementById('import-step-1').classList.remove('hidden');
+      document.getElementById('import-step-2').classList.add('hidden');
+      document.getElementById('pdf-reading-status').classList.add('hidden');
+      document.getElementById('import-raw-pdf-dump').classList.add('hidden');
+      document.getElementById('toggle-raw-pdf-btn').classList.add('hidden');
+      document.getElementById('import-modal').classList.remove('hidden');
+      updateImportPreviewSummary();
+      refreshIcons();
+    }
+
+    function closeImportModal() {
+      document.getElementById('import-modal').classList.add('hidden');
+    }
+
+    function fillSampleInvoiceText() {
+      document.getElementById('import-raw-textarea').value =
+`15/NOV; 1234; Outback Steakhouse Shopping; 1x; 540,00
+16/NOV; 5678; Posto Shell Combustível; 1x; 220,00
+17/NOV; 1234; Booking Hotel Fim de Ano; 1/3; 1200,00`;
+      updateImportPreviewSummary();
+    }
+
+    function updateImportPreviewSummary() {
+      const raw = document.getElementById('import-raw-textarea')?.value.trim() || '';
+      const bar = document.getElementById('import-preview-totals-bar');
+      if (!bar) return;
+      if (!raw) {
+        bar.classList.add('hidden');
+        return;
+      }
+
+      const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
+      let count = 0;
+      let posSum = 0;
+      let negSum = 0;
+
+      lines.forEach(line => {
+        const parts = line.includes(';') ? line.split(';').map(p => p.trim()) : line.split('\t').map(p => p.trim());
+        if (parts.length >= 5) {
+          const parcRaw = parts[3].toLowerCase().replace('x', '').trim();
+          let remInst = 1;
+          if (parcRaw.includes('/')) {
+            const [cP, tP] = parcRaw.split('/').map(n => parseInt(n, 10));
+            if (tP && cP) remInst = Math.max(1, tP - cP + 1);
+          } else {
+            remInst = parseInt(parcRaw, 10) || 1;
+          }
+          const totalVal = parseFloat(parts[4].replace(/R\$/gi, '').replace(/\./g, '').replace(',', '.').trim());
+          if (!isNaN(totalVal) && totalVal !== 0) {
+            const monthVal = totalVal / remInst;
+            count++;
+            if (monthVal > 0) posSum += monthVal;
+            else negSum += monthVal;
+          }
+        }
+      });
+
+      if (count === 0) {
+        bar.classList.add('hidden');
+        return;
+      }
+
+      bar.classList.remove('hidden');
+      document.getElementById('imp-prev-count').textContent = count;
+      document.getElementById('imp-prev-pos').textContent = formatBRL(posSum);
+      document.getElementById('imp-prev-neg').textContent = formatBRL(negSum);
+      document.getElementById('imp-prev-net').textContent = formatBRL(posSum + negSum);
+    }
+
+    function closeImportModal() {
+      document.getElementById('import-modal').classList.add('hidden');
+    }
+
+    function fillSampleInvoiceText() {
+      document.getElementById('import-raw-textarea').value =
+`15/NOV; 1234; Outback Steakhouse Shopping; 1x; 540,00
+16/NOV; 5678; Posto Shell Combustível; 1x; 220,00
+17/NOV; 1234; Booking Hotel Fim de Ano; 1/3; 1200,00`;
+    }
+
+    function handleDropzoneDragOver(e) {
+      e.preventDefault();
+      document.getElementById('pdf-dropzone').classList.add('border-emerald-500', 'bg-emerald-50');
+    }
+
+    function handleDropzoneDragLeave(e) {
+      e.preventDefault();
+      document.getElementById('pdf-dropzone').classList.remove('border-emerald-500', 'bg-emerald-50');
+    }
+
+    function handleDropzoneDrop(e) {
+      e.preventDefault();
+      document.getElementById('pdf-dropzone').classList.remove('border-emerald-500', 'bg-emerald-50');
+      const file = e.dataTransfer?.files?.[0];
+      if (file) processUploadedInvoiceFile(file);
+    }
+
+    function handleImportFileUpload(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      processUploadedInvoiceFile(file);
+    }
+
+    async function processUploadedInvoiceFile(file) {
+      const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+      const statusBadge = document.getElementById('pdf-reading-status');
+      const statusText = document.getElementById('pdf-reading-text');
+
+      if (!isPdf) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          document.getElementById('import-raw-textarea').value = e.target.result;
+          showToast('Arquivo CSV/TXT carregado! Clique em "Iniciar Divisão Guiada".', 'success');
+        };
+        reader.readAsText(file);
+        return;
+      }
+
+      if (!window.pdfjsLib) {
+        showToast('Biblioteca PDF.js ainda carregando. Tente novamente em instantes.', 'error');
+        return;
+      }
+
+      try {
+        statusBadge.classList.remove('hidden');
+        statusText.textContent = 'Abrindo PDF da fatura...';
+
+        const arrayBuffer = await file.arrayBuffer();
+        const pdf = await window.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        let fullExtractedLines = [];
+
+        for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+          statusText.textContent = `Lendo página ${pageNum} de ${pdf.numPages}...`;
+          const page = await pdf.getPage(pageNum);
+          const textContent = await page.getTextContent();
+
+          const rowsMap = {};
+          textContent.items.forEach(item => {
+            const y = Math.round(item.transform[5] / 4) * 4;
+            if (!rowsMap[y]) rowsMap[y] = [];
+            rowsMap[y].push({ x: item.transform[4], str: item.str });
+          });
+
+          const sortedYs = Object.keys(rowsMap).map(Number).sort((a, b) => b - a);
+          sortedYs.forEach(y => {
+            const lineText = rowsMap[y]
+              .sort((a, b) => a.x - b.x)
+              .map(i => i.str.trim())
+              .filter(Boolean)
+              .join(' ');
+            if (lineText) fullExtractedLines.push(`__PAGE_${pageNum}__ ${lineText}`);
+          });
+        }
+
+        const rawDump = fullExtractedLines.map(l => l.replace(/^__PAGE_\d+__\s*/, '')).join('\n');
+        document.getElementById('import-raw-pdf-dump').value = rawDump;
+        document.getElementById('toggle-raw-pdf-btn').classList.remove('hidden');
+
+        const parsedLines = extractTransactionsFromPdfLines(fullExtractedLines);
+        statusBadge.classList.add('hidden');
+
+        if (parsedLines.length > 0) {
+          document.getElementById('import-raw-textarea').value = parsedLines.join('\n');
+          updateImportPreviewSummary();
+          showToast(`${parsedLines.length} lançamentos extraídos da fatura!`, 'success');
+        } else {
+          document.getElementById('import-raw-pdf-dump').classList.remove('hidden');
+          showToast('PDF lido, mas nenhum padrão automático foi detectado. Verifique o texto bruto abaixo.', 'error');
+        }
+      } catch (err) {
+        statusBadge.classList.add('hidden');
+        showToast('Erro ao processar o PDF. Verifique se o arquivo não possui senha.', 'error');
+      }
+    }
+
+    function toggleRawPdfPreview() {
+      const dump = document.getElementById('import-raw-pdf-dump');
+      dump.classList.toggle('hidden');
+    }
+
+    function extractTransactionsFromPdfLines(lines) {
+      const refYear = document.getElementById('import-year-select')?.value || '2026';
+      const defaultCardNum = document.getElementById('import-card-select').value === 'Cartão 2' ? 'Cartão 2' : 'Cartão 1';
+      const monthNames = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
+      const results = [];
+
+      const ignoreKeywords = [
+        'SALDO ANTERIOR', 'PAGAMENTO RECEBIDO', 'PAGAMENTO EM ', 'TOTAL DA FATURA',
+        'TOTAL DE COMPRAS', 'VALOR TOTAL', 'LIMITE TOTAL', 'LIMITE DISPONIVEL',
+        'VENCIMENTO', 'EMISSÃO E ENVIO', 'ESTORNO REFERENTE',
+        'SALDO EM ROTATIVO', 'CRÉDITO DE ROTATIVO', 'TOTAL A PAGAR:',
+        'JUROS DE ROTATIVO', 'IOF DE ROTATIVO', 'PAGAMENTOS E FINANCIAMENTOS'
+      ];
+
+      const nubankLineRegex = /^(\d{2}[\s\/](?:\d{2}|[A-Za-z]{3})(?:\/\d{2,4})?)\s+(.+?)\s+(-?\s*R\$\s*\d{1,3}(?:\.\d{3})*,\d{2}|R\$\s*-\d{1,3}(?:\.\d{3})*,\d{2}|-?\d{1,3}(?:\.\d{3})*,\d{2})$/;
+      const installmentRegex = /(?:[-–—]?\s*PARCELA\s+|PARC\s*)?(\d{1,2})\s*\/\s*(\d{1,2})/i;
+
+      let currentSectionOwner = '';
+      let inTransactionsSection = false;
+
+      lines.forEach(rawLine => {
+        const pageMatch = rawLine.match(/^__PAGE_(\d+)__\s*(.*)$/);
+        const pageNum = pageMatch ? parseInt(pageMatch[1], 10) : 3;
+        const line = pageMatch ? pageMatch[2].trim() : rawLine.trim();
+        const upper = line.toUpperCase();
+
+        if (pageNum >= 3 || upper.includes('TRANSAÇÕES DE')) {
+          inTransactionsSection = true;
+        }
+        if (!inTransactionsSection) return;
+
+        if (upper.startsWith('COMPRAS DE ')) {
+          currentSectionOwner = line.replace(/^Compras de\s+/i, '').trim();
+          return;
+        }
+        if (upper.startsWith('PAGAMENTOS E') || upper.includes('FINANCIAMENTOS')) {
+          currentSectionOwner = '';
+          return;
+        }
+
+        if (ignoreKeywords.some(kw => upper.includes(kw))) return;
+
+        const match = line.match(nubankLineRegex);
+        if (match) {
+          const rawDate = match[1].trim().replace(/\s+/, '/').toUpperCase();
+          let middlePart = match[2].trim();
+          const rawValClean = match[3].replace(/R\$/gi, '').replace(/\s+/g, '').trim();
+          const isNegativeVal = rawValClean.startsWith('-') || upper.includes('ESTORNO') || upper.includes('REEMBOLSO');
+
+          let cardTag = defaultCardNum;
+          const cardDigitsMatch = middlePart.match(/(?:^|\s)\.{0,4}(\d{4})(?=\s|$)/);
+          if (cardDigitsMatch) {
+            cardTag = cardDigitsMatch[1];
+            middlePart = middlePart.replace(cardDigitsMatch[0], ' ').trim();
+          } else if (upper.includes('NUPAY')) {
+            cardTag = 'NuPay';
+            middlePart = middlePart.replace(/\bNuPay\b/gi, '').trim();
+          }
+
+          let desc = middlePart
+            .replace(/[Πกบ]/g, '')
+            .replace(/^[\s\-–•!*C\d]+(?=\s+[A-Za-z])/, '')
+            .replace(/^[\s\-–•!*C]+/, '')
+            .replace(/[\s\-–•!*]+$/, '')
+            .replace(/\s{2,}/g, ' ')
+            .trim();
+
+          if (!desc) return;
+
+          const iso = parsePlanilhaDate(rawDate, refYear);
+          const isoParts = iso.split('-');
+          const ddMmm = `${isoParts[2]}/${monthNames[parseInt(isoParts[1], 10) - 1]}`;
+
+          let parcelaLabel = '1x';
+          let remainingInstallments = 1;
+          const parcMatch = desc.match(installmentRegex);
+          if (parcMatch) {
+            const currP = parseInt(parcMatch[1], 10);
+            const totP = parseInt(parcMatch[2], 10);
+            if (totP > 1 && totP <= 36 && currP <= totP) {
+              remainingInstallments = totP - currP + 1;
+              parcelaLabel = `${currP}/${totP}`;
+              desc = desc.replace(installmentRegex, '').replace(/[-–]\s*$/, '').trim();
+            }
+          }
+
+          if (currentSectionOwner) {
+            desc = `${desc} (${currentSectionOwner.split(' ')[0]})`;
+          }
+
+          const absNumericVal = Math.abs(parseFloat(rawValClean.replace(/\./g, '').replace(',', '.')));
+          if (!isNaN(absNumericVal) && absNumericVal > 0) {
+            const signedTotal = (isNegativeVal ? -1 : 1) * absNumericVal * remainingInstallments;
+            const adjustedTotal = signedTotal.toFixed(2).replace('.', ',');
+            results.push(`${ddMmm}; ${cardTag}; ${desc}; ${parcelaLabel}; ${adjustedTotal}`);
+          }
+        }
+      });
+
+      return results;
+    }
+
+    function startInteractiveDivisionWizard() {
+      const raw = document.getElementById('import-raw-textarea').value.trim();
+      if (!raw) {
+        showToast('Cole os lançamentos ou anexe um arquivo PDF/CSV primeiro.', 'error');
+        return;
+      }
+
+      const fallbackCard = document.getElementById('import-card-select').value;
+      const refYear = document.getElementById('import-year-select')?.value || '2026';
+      const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
+      const queue = [];
+
+      lines.forEach(line => {
+        const parts = line.includes(';')
+          ? line.split(';').map(p => p.trim())
+          : line.split('\t').map(p => p.trim());
+
+        if (parts.length >= 5) {
+          const isoDate = parsePlanilhaDate(parts[0], refYear);
+          const cardResolved = resolveCardLabel(parts[1], fallbackCard);
+          const description = parts[2];
+          const parcRaw = parts[3].toLowerCase().replace('x', '').trim();
+          let installments = 1;
+          if (parcRaw.includes('/')) {
+            const [cP, tP] = parcRaw.split('/').map(n => parseInt(n, 10));
+            if (tP && cP) installments = Math.max(1, tP - cP + 1);
+          } else {
+            installments = parseInt(parcRaw, 10) || 1;
+          }
+          const amount = parseFloat(parts[4].replace(/R\$/gi, '').replace(/\./g, '').replace(',', '.').trim());
+
+          const suggestedUser = state.users.find(u =>
+            u.role !== 'ADMIN' && description.toLowerCase().includes(`(${u.name.toLowerCase()})`)
+          );
+
+          if (description && !isNaN(amount) && amount !== 0) {
+            queue.push({
+              date: isoDate,
+              card: cardResolved.startsWith('Cartão 2') ? 'Cartão 2' : 'Cartão 1',
+              cardNumberTag: parts[1],
+              description: parts[1] && !parts[1].startsWith('Cartão') ? `${description} [${parts[1]}]` : description,
+              totalAmount: amount,
+              installments,
+              suggestedParticipants: suggestedUser ? [suggestedUser.id] : null
+            });
+          }
+        } else if (parts.length >= 3) {
+          const isoDate = parsePlanilhaDate(parts[0], refYear);
+          const amount = parseFloat(parts[2].replace(/R\$/gi, '').replace(/\./g, '').replace(',', '.').trim());
+          const installments = parseInt((parts[3] || '1').replace(/\D/g, ''), 10) || 1;
+          if (!isNaN(amount) && amount !== 0) {
+            queue.push({ date: isoDate, description: parts[1], totalAmount: amount, installments, card: fallbackCard, suggestedParticipants: null });
+          }
+        }
+      });
+
+      if (queue.length === 0) {
+        showToast('Nenhum lançamento válido encontrado. Use o modelo: DD/MMM; Número do cartão; Descrição; Parcelas; Valor', 'error');
+        return;
+      }
+
+      state.wizardQueue = queue;
+      state.wizardDecisions = new Array(queue.length).fill(null);
+      state.wizardIndex = 0;
+      document.getElementById('import-step-1').classList.add('hidden');
+      document.getElementById('import-step-2').classList.remove('hidden');
+      renderWizardCurrentItem();
+      refreshIcons();
+    }
+
+    function renderWizardCurrentItem() {
+      const item = state.wizardQueue[state.wizardIndex];
+      const total = state.wizardQueue.length;
+      const savedDecision = state.wizardDecisions[state.wizardIndex];
+      const isRefund = item.totalAmount < 0;
+
+      const prevBtn = document.getElementById('wizard-prev-btn');
+      if (prevBtn) {
+        prevBtn.classList.toggle('hidden', state.wizardIndex === 0);
+      }
+
+      document.getElementById('wizard-progress-text').textContent = `Item ${state.wizardIndex + 1} de ${total}`;
+      document.getElementById('wizard-progress-bar').style.width = `${((state.wizardIndex + 1) / total) * 100}%`;
+      document.getElementById('wizard-item-date').textContent = `${formatDateBR(item.date)} • ${item.card}`;
+      document.getElementById('wizard-item-desc').textContent = item.description;
+      document.getElementById('wizard-item-inst').textContent = item.installments > 1 ? `Parcelado em ${item.installments}x` : 'À vista (1x)';
+
+      const refundBadge = document.getElementById('wizard-item-refund-badge');
+      const amountLabel = document.getElementById('wizard-item-amount-label');
+      const amountEl = document.getElementById('wizard-item-amount');
+      if (refundBadge) refundBadge.classList.toggle('hidden', !isRefund);
+      if (amountLabel) amountLabel.textContent = isRefund ? 'Valor do Reembolso' : 'Valor Total';
+      amountEl.textContent = formatBRL(item.totalAmount);
+      amountEl.className = `font-display text-2xl font-extrabold tabular-nums ${isRefund ? 'text-cyan-700' : 'text-slate-900'}`;
+
+      if (savedDecision && !savedDecision.skipped) {
+        state.wizardSplitMode = savedDecision.splitType || 'EQUAL';
+        state.wizardLockedUsers = {};
+        if (state.wizardSplitMode === 'CUSTOM' && savedDecision.participants) {
+          savedDecision.participants.forEach(uid => { state.wizardLockedUsers[uid] = true; });
+        }
+        updateWizardSplitModeButtons();
+        wizardSelectCustom(savedDecision.participants, savedDecision.customSplits || {});
+      } else {
+        state.wizardSplitMode = 'EQUAL';
+        state.wizardLockedUsers = {};
+        updateWizardSplitModeButtons();
+        if (item.suggestedParticipants && item.suggestedParticipants.length > 0) {
+          wizardSelectCustom(item.suggestedParticipants, {});
+        } else {
+          wizardSelectPreset('CORE');
+        }
+      }
+      refreshIcons();
+    }
+
+    function wizardPrevItem() {
+      if (state.wizardIndex > 0) {
+        state.wizardIndex--;
+        renderWizardCurrentItem();
+      }
+    }
+
+    function setWizardSplitMode(mode) {
+      const item = state.wizardQueue[state.wizardIndex];
+      const currentChecked = Array.from(document.querySelectorAll('input[name="wiz-participant"]:checked')).map(el => el.value);
+      state.wizardLockedUsers = {};
+
+      let initialSplits = {};
+      if (mode === 'CUSTOM' && item && currentChecked.length > 0) {
+        initialSplits = distributeEqualCents(item.totalAmount, currentChecked);
+      }
+
+      state.wizardSplitMode = mode;
+      updateWizardSplitModeButtons();
+      wizardSelectCustom(currentChecked, initialSplits);
+    }
+
+    function updateWizardSplitModeButtons() {
+      const btnEqual = document.getElementById('wiz-split-mode-equal');
+      const btnCustom = document.getElementById('wiz-split-mode-custom');
+      if (!btnEqual || !btnCustom) return;
+
+      if (state.wizardSplitMode === 'EQUAL') {
+        btnEqual.className = 'px-2.5 py-1 rounded-lg text-xs font-bold bg-white text-slate-900 shadow-sm transition';
+        btnCustom.className = 'px-2.5 py-1 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 transition';
+      } else {
+        btnCustom.className = 'px-2.5 py-1 rounded-lg text-xs font-bold bg-white text-indigo-700 shadow-sm transition';
+        btnEqual.className = 'px-2.5 py-1 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-900 transition';
+      }
+    }
+
+    function wizardSelectPreset(preset) {
+      let ids = [];
+      if (preset === 'ADMIN') ids = ['alisson'];
+      else if (preset === 'ALL') ids = state.users.map(u => u.id);
+      else if (preset === 'NONE') ids = [];
+      else ids = state.users.filter(u => u.isCore).map(u => u.id);
+
+      state.wizardLockedUsers = {};
+      const item = state.wizardQueue[state.wizardIndex];
+      const splits = (state.wizardSplitMode === 'CUSTOM' && item)
+        ? distributeEqualCents(item.totalAmount, ids)
+        : {};
+      wizardSelectCustom(ids, splits);
+    }
+
+    function wizardSelectCustom(selectedIds, customSplits = {}) {
+      const grid = document.getElementById('wizard-participants-grid');
+      const isCustom = state.wizardSplitMode === 'CUSTOM';
+      const item = state.wizardQueue[state.wizardIndex];
+      const hasMax = item && item.totalAmount !== 0;
+      const isNegative = item && item.totalAmount < 0;
+
+      grid.innerHTML = state.users.map(u => {
+        const checked = selectedIds.includes(u.id);
+        const val = customSplits[u.id] !== undefined ? Number(customSplits[u.id]).toFixed(2) : '';
+        return `
+          <div class="flex items-center justify-between gap-2 p-2.5 rounded-xl border transition ${checked ? (isNegative ? 'border-cyan-400 bg-cyan-50/60' : 'border-emerald-400 bg-emerald-50/60') : 'border-slate-200 bg-white'}">
+            <label class="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-800 flex-1 min-w-0">
+              <input type="checkbox" name="wiz-participant" value="${u.id}" ${checked ? 'checked' : ''} onchange="handleWizardParticipantToggle('${u.id}', this.checked)" class="rounded text-emerald-600 focus:ring-emerald-500" />
+              <span class="truncate">${u.name}</span>
+            </label>
+            ${isCustom ? `
+              <div class="flex items-center gap-1 shrink-0">
+                <span class="text-[10px] font-bold text-slate-400">R$</span>
+                <input
+                  type="number"
+                  step="0.01"
+                  ${hasMax ? (isNegative ? `min="${item.totalAmount}" max="0"` : `min="0" max="${item.totalAmount}"`) : ''}
+                  data-wiz-custom-user="${u.id}"
+                  value="${checked ? val : ''}"
+                  ${checked ? '' : 'disabled'}
+                  oninput="handleWizardCustomInput('${u.id}')"
+                  placeholder="0.00"
+                  class="w-20 px-2 py-1 text-right text-xs font-bold border border-slate-300 rounded-lg bg-white disabled:bg-slate-100 disabled:text-slate-400 tabular-nums focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                />
+              </div>
+            ` : ''}
+          </div>
+        `;
+      }).join('');
+      updateWizardSplitSummary();
+    }
+
+    function handleWizardCustomInput(changedUserId) {
+      const item = state.wizardQueue[state.wizardIndex];
+      if (!item) return;
+
+      const totalVal = item.totalAmount;
+      const isNegative = totalVal < 0;
+      const checked = Array.from(document.querySelectorAll('input[name="wiz-participant"]:checked')).map(el => el.value);
+      const changedInp = document.querySelector(`input[data-wiz-custom-user="${changedUserId}"]`);
+      if (!changedInp) return;
+
+      let enteredVal = parseFloat(changedInp.value);
+      if (isNaN(enteredVal)) enteredVal = 0;
+
+      if (isNegative) {
+        if (enteredVal > 0) enteredVal = -Math.abs(enteredVal);
+        if (enteredVal < totalVal) enteredVal = totalVal;
+        changedInp.value = enteredVal.toFixed(2);
+      } else {
+        if (enteredVal < 0) enteredVal = 0;
+        if (enteredVal > totalVal) {
+          enteredVal = totalVal;
+          changedInp.value = enteredVal.toFixed(2);
+        }
+      }
+
+      state.wizardLockedUsers[changedUserId] = true;
+
+      const otherChecked = checked.filter(id => id !== changedUserId);
+      if (otherChecked.length > 0 && totalVal !== 0) {
+        let unlockedOthers = otherChecked.filter(id => !state.wizardLockedUsers[id]);
+        if (unlockedOthers.length === 0) {
+          otherChecked.forEach(id => { delete state.wizardLockedUsers[id]; });
+          unlockedOthers = otherChecked;
+        }
+
+        const lockedOthersSum = otherChecked
+          .filter(id => !unlockedOthers.includes(id))
+          .reduce((sum, id) => {
+            const inp = document.querySelector(`input[data-wiz-custom-user="${id}"]`);
+            return sum + (parseFloat(inp?.value) || 0);
+          }, 0);
+
+        if (isNegative) {
+          const minAllowedForChanged = Math.min(0, Number((totalVal - lockedOthersSum).toFixed(2)));
+          if (enteredVal < minAllowedForChanged) {
+            enteredVal = minAllowedForChanged;
+            changedInp.value = enteredVal.toFixed(2);
+          }
+          const remaining = Math.min(0, Number((totalVal - lockedOthersSum - enteredVal).toFixed(2)));
+          const redistributed = distributeEqualCents(remaining, unlockedOthers);
+          unlockedOthers.forEach(id => {
+            const inp = document.querySelector(`input[data-wiz-custom-user="${id}"]`);
+            if (inp) inp.value = redistributed[id].toFixed(2);
+          });
+        } else {
+          const maxAllowedForChanged = Math.max(0, Number((totalVal - lockedOthersSum).toFixed(2)));
+          if (enteredVal > maxAllowedForChanged) {
+            enteredVal = maxAllowedForChanged;
+            changedInp.value = enteredVal.toFixed(2);
+          }
+          const remaining = Math.max(0, Number((totalVal - lockedOthersSum - enteredVal).toFixed(2)));
+          const redistributed = distributeEqualCents(remaining, unlockedOthers);
+          unlockedOthers.forEach(id => {
+            const inp = document.querySelector(`input[data-wiz-custom-user="${id}"]`);
+            if (inp) inp.value = redistributed[id].toFixed(2);
+          });
+        }
+      }
+
+      updateWizardSplitSummary();
+    }
+
+    function handleWizardParticipantToggle(userId, isChecked) {
+      const checked = Array.from(document.querySelectorAll('input[name="wiz-participant"]:checked')).map(el => el.value);
+      if (!isChecked) delete state.wizardLockedUsers[userId];
+
+      const item = state.wizardQueue[state.wizardIndex];
+      if (state.wizardSplitMode === 'CUSTOM' && item) {
+        state.wizardLockedUsers = {};
+        const splits = distributeEqualCents(item.totalAmount, checked);
+        wizardSelectCustom(checked, splits);
+      } else {
+        wizardSelectCustom(checked, {});
+      }
+    }
+
+    function updateWizardSplitSummary() {
+      const item = state.wizardQueue[state.wizardIndex];
+      if (!item) return;
+
+      const checked = Array.from(document.querySelectorAll('input[name="wiz-participant"]:checked')).map(el => el.value);
+      const summary = document.getElementById('wizard-split-summary');
+      const isNegative = item.totalAmount < 0;
+      if (!summary) return;
+
+      if (checked.length === 0) {
+        summary.className = 'mt-3 bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-900';
+        summary.textContent = 'Selecione pelo menos 1 participante ou clique em "Ignorar".';
+        return;
+      }
+
+      if (state.wizardSplitMode === 'CUSTOM') {
+        let sumCustom = 0;
+        checked.forEach(uid => {
+          const inp = document.querySelector(`input[data-wiz-custom-user="${uid}"]`);
+          sumCustom += parseFloat(inp?.value) || 0;
+        });
+        const diff = Number((item.totalAmount - sumCustom).toFixed(2));
+        if (Math.abs(diff) <= 0.02) {
+          summary.className = isNegative
+            ? 'mt-3 bg-cyan-50 border border-cyan-300 rounded-xl p-3 text-xs text-cyan-950'
+            : 'mt-3 bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-xs text-emerald-900';
+          summary.innerHTML = `${isNegative ? 'Reembolso/Desconto fechado' : 'Divisão personalizada fechada'}: <strong>${formatBRL(sumCustom)}</strong> de <strong>${formatBRL(item.totalAmount)}</strong>.`;
+        } else {
+          summary.className = 'mt-3 bg-amber-50 border border-amber-300 rounded-xl p-3 text-xs text-amber-950';
+          summary.innerHTML = `Atribuído: <strong>${formatBRL(sumCustom)}</strong> de <strong>${formatBRL(item.totalAmount)}</strong> • Diferença de <strong>${formatBRL(diff)}</strong>.`;
+        }
+        return;
+      }
+
+      const monthly = item.totalAmount / item.installments;
+      const perPerson = monthly / checked.length;
+      summary.className = isNegative
+        ? 'mt-3 bg-cyan-50 border border-cyan-300 rounded-xl p-3 text-xs text-cyan-950'
+        : 'mt-3 bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-xs text-emerald-900';
+      summary.innerHTML = `${isNegative ? 'Reembolso/Desconto mensal' : 'Parcela mensal'} de <strong>${formatBRL(monthly)}</strong> dividida entre <strong>${checked.length} pessoa(s)</strong> = <strong>${formatBRL(perPerson)}</strong> por pessoa.`;
+    }
+
+    function wizardConfirmItem() {
+      const checked = Array.from(document.querySelectorAll('input[name="wiz-participant"]:checked')).map(el => el.value);
+      if (checked.length === 0) {
+        showToast('Selecione pelo menos 1 pessoa ou clique em "Ignorar".', 'error');
+        return;
+      }
+
+      const item = state.wizardQueue[state.wizardIndex];
+      const splitType = state.wizardSplitMode;
+      let customSplits = null;
+
+      if (splitType === 'CUSTOM') {
+        customSplits = {};
+        let sumCustom = 0;
+        checked.forEach(uid => {
+          const inp = document.querySelector(`input[data-wiz-custom-user="${uid}"]`);
+          const val = parseFloat(inp?.value) || 0;
+          customSplits[uid] = val;
+          sumCustom += val;
+        });
+
+        if (Math.abs(item.totalAmount - sumCustom) > 0.05) {
+          showToast(`A soma (${formatBRL(sumCustom)}) precisa fechar com o valor total (${formatBRL(item.totalAmount)}).`, 'error');
+          return;
+        }
+      }
+
+      state.wizardDecisions[state.wizardIndex] = {
+        skipped: false,
+        participants: checked,
+        splitType,
+        customSplits
+      };
+      advanceWizard();
+    }
+
+    function wizardSkipItem() {
+      state.wizardDecisions[state.wizardIndex] = { skipped: true };
+      advanceWizard();
+    }
+
+    function advanceWizard() {
+      state.wizardIndex++;
+      if (state.wizardIndex >= state.wizardQueue.length) {
+        let importedCount = 0;
+        let firstImportedMonth = null;
+
+        state.wizardQueue.forEach((item, idx) => {
+          const decision = state.wizardDecisions[idx];
+          if (decision && !decision.skipped && decision.participants && decision.participants.length > 0) {
+            state.expenses.push({
+              id: 'exp-' + Date.now() + '-' + idx,
+              ...item,
+              participants: decision.participants,
+              splitType: decision.splitType,
+              customSplits: decision.customSplits
+            });
+            importedCount++;
+            if (!firstImportedMonth) firstImportedMonth = item.date.slice(0, 7);
+          }
+        });
+
+        if (firstImportedMonth) {
+          state.selectedMonth = firstImportedMonth;
+        }
+        saveAllData();
+        closeImportModal();
+        renderCurrentView();
+        showToast(`${importedCount} lançamento(s) importado(s) e dividido(s) com sucesso!`, 'success');
+      } else {
+        renderWizardCurrentItem();
+      }
+    }
+
+    // ---------------------------------------------------------
+    // CONTROLE DE PARTICIPANTES, AGREGADOS & PINS (ADMIN)
+    // ---------------------------------------------------------
+    function openManagePeopleModal() {
+      renderPeopleListModal();
+      document.getElementById('people-modal').classList.remove('hidden');
+      refreshIcons();
+    }
+
+    function closePeopleModal() {
+      document.getElementById('people-modal').classList.add('hidden');
+    }
+
+    function toggleRevealUserPin(userId) {
+      revealedPinsMap[userId] = !revealedPinsMap[userId];
+      renderPeopleListModal();
+      refreshIcons();
+    }
+
+    function adminResetUserPin(userId) {
+      const idx = state.users.findIndex(u => u.id === userId);
+      if (idx === -1) return;
+
+      if (state.users[idx].role === 'ADMIN') {
+        showToast('Para alterar o PIN do Administrador, use o botão "Meu PIN" no topo.', 'error');
+        return;
+      }
+
+      state.users[idx].pin = '';
+      state.users[idx].pinConfigured = false;
+      revealedPinsMap[userId] = false;
+      saveAllData();
+      renderPeopleListModal();
+      refreshIcons();
+      showToast(`PIN de ${state.users[idx].name} resetado! No próximo login deverá criar um novo.`, 'success');
+    }
+
+    function adminToggleBlockUser(userId) {
+      const idx = state.users.findIndex(u => u.id === userId);
+      if (idx === -1 || state.users[idx].role === 'ADMIN') return;
+
+      state.users[idx].blocked = !state.users[idx].blocked;
+      saveAllData();
+      renderPeopleListModal();
+      refreshIcons();
+      showToast(
+        state.users[idx].blocked
+          ? `Acesso de ${state.users[idx].name} bloqueado.`
+          : `Acesso de ${state.users[idx].name} desbloqueado!`,
+        'success'
+      );
+    }
+
+    function adminEditUserName(userId) {
+      const idx = state.users.findIndex(u => u.id === userId);
+      if (idx === -1) return;
+      const input = document.getElementById(`edit-name-${userId}`);
+      if (!input) return;
+      const newName = input.value.trim();
+      if (!newName) return;
+
+      state.users[idx].name = newName;
+      saveAllData();
+      renderPeopleListModal();
+      renderCurrentView();
+      refreshIcons();
+      showToast('Nome atualizado com sucesso!', 'success');
+    }
+
+    function renderPeopleListModal() {
+      const container = document.getElementById('people-list-container');
+      container.innerHTML = state.users.map(u => {
+        const isAdmin = u.role === 'ADMIN';
+        const isRevealed = !!revealedPinsMap[u.id];
+        const pinDisplay = !u.pinConfigured
+          ? '<span class="text-amber-700 font-bold">Aguardando 1º Acesso</span>'
+          : (isRevealed ? `<span class="font-mono font-extrabold text-slate-900">${u.pin}</span>` : '<span class="font-mono text-slate-500">••••</span>');
+
+        return `
+          <div class="p-3.5 rounded-2xl border ${u.blocked ? 'border-rose-200 bg-rose-50/40' : 'border-slate-200 bg-white'} space-y-2.5">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div class="flex items-center gap-2.5 flex-1">
+                <span class="w-9 h-9 rounded-full ${u.bg} ${u.text} flex items-center justify-center font-bold text-xs shrink-0 overflow-hidden">
+                  ${renderUserAvatarInner(u)}
+                </span>
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-1.5">
+                    <input
+                      type="text"
+                      id="edit-name-${u.id}"
+                      value="${u.name}"
+                      onchange="adminEditUserName('${u.id}')"
+                      class="text-xs font-bold text-slate-900 bg-transparent border-b border-transparent hover:border-slate-300 focus:border-emerald-500 focus:outline-none px-0.5 py-0.5 max-w-[160px]"
+                      title="Clique para editar o nome"
+                    />
+                    <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full ${isAdmin ? 'bg-purple-100 text-purple-800' : (u.isCore ? 'bg-slate-100 text-slate-600' : 'bg-indigo-50 text-indigo-700')}">
+                      ${isAdmin ? 'Admin' : (u.isCore ? 'Fixo' : 'Agregado')}
+                    </span>
+                    ${u.blocked ? `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-700">Bloqueado</span>` : ''}
+                  </div>
+                  <div class="flex items-center gap-2 mt-1 text-[11px] text-slate-500">
+                    <span>PIN: ${pinDisplay}</span>
+                    ${u.pinConfigured ? `
+                      <button type="button" onclick="toggleRevealUserPin('${u.id}')" class="text-slate-400 hover:text-slate-700" title="${isRevealed ? 'Ocultar PIN' : 'Ver PIN'}">
+                        <i data-lucide="${isRevealed ? 'eye-off' : 'eye'}" class="w-3.5 h-3.5"></i>
+                      </button>
+                    ` : ''}
+                  </div>
+                </div>
+              </div>
+
+              <div class="flex items-center gap-1.5 flex-wrap">
+                ${!isAdmin ? `
+                  <button
+                    type="button"
+                    onclick="adminResetUserPin('${u.id}')"
+                    class="px-2.5 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 text-[11px] font-bold flex items-center gap-1 transition"
+                    title="Limpar PIN atual e exigir novo cadastro no próximo login"
+                  >
+                    <i data-lucide="rotate-ccw" class="w-3 h-3"></i>
+                    <span>Resetar PIN</span>
+                  </button>
+                  <button
+                    type="button"
+                    onclick="adminToggleBlockUser('${u.id}')"
+                    class="px-2.5 py-1.5 rounded-xl ${u.blocked ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-700 border-slate-200'} border text-[11px] font-bold transition"
+                  >
+                    ${u.blocked ? 'Desbloquear' : 'Bloquear'}
+                  </button>
+                ` : `
+                  <button
+                    type="button"
+                    onclick="closePeopleModal(); openChangeMyPinModal();"
+                    class="px-2.5 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-[11px] font-bold"
+                  >
+                    Alterar PIN Admin
+                  </button>
+                `}
+
+                ${!u.isCore && !isAdmin ? `
+                  <button
+                    type="button"
+                    onclick="removeAggregate('${u.id}')"
+                    class="p-1.5 rounded-xl text-rose-600 hover:bg-rose-50"
+                    title="Remover Agregado"
+                  >
+                    <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                  </button>
+                ` : ''}
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function addNewAggregate(e) {
+      e.preventDefault();
+      const nameInput = document.getElementById('new-agg-name');
+      const typeSelect = document.getElementById('new-agg-type');
+      const colorSelect = document.getElementById('new-agg-color');
+      const rawName = nameInput.value.trim();
+
+      if (!rawName) return;
+
+      const isCore = typeSelect.value === 'CORE';
+      const colorKey = colorSelect.value || 'slate';
+      const palette = COLOR_PALETTES[colorKey] || COLOR_PALETTES.slate;
+
+      const displayName = (!isCore && !rawName.toLowerCase().includes('agregado'))
+        ? `${rawName} (Agregado)`
+        : rawName;
+
+      const newUser = {
+        id: 'user-' + Date.now(),
+        name: displayName,
+        role: 'MEMBER',
+        isCore,
+        pin: '',
+        pinConfigured: false,
+        blocked: false,
+        colorName: colorKey,
+        bg: palette.bg,
+        text: palette.text,
+        border: palette.border,
+        hex: palette.hex
+      };
+
+      state.users.push(newUser);
+      saveAllData();
+      nameInput.value = '';
+      renderPeopleListModal();
+      renderCurrentView();
+      refreshIcons();
+      showToast(`${newUser.name} cadastrado! Ele criará o próprio PIN no primeiro acesso.`, 'success');
+    }
+
+    function removeAggregate(id) {
+      state.users = state.users.filter(u => u.id !== id);
+      saveAllData();
+      renderPeopleListModal();
+      renderCurrentView();
+      refreshIcons();
+      showToast('Agregado removido.', 'success');
+    }
+
+    // ---------------------------------------------------------
+    // TOAST FEEDBACK VISUAL
+    // ---------------------------------------------------------
+    function showToast(message, type = 'success') {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      const bg = type === 'error' ? 'bg-rose-600' : 'bg-slate-900';
+      toast.className = `${bg} text-white text-xs font-semibold px-4 py-3 rounded-xl shadow-lg flex items-center gap-2 pointer-events-auto transition-all duration-300`;
+      toast.innerHTML = `
+        <span class="w-2 h-2 rounded-full ${type === 'error' ? 'bg-white' : 'bg-emerald-400'}"></span>
+        <span>${message}</span>
+      `;
+      container.appendChild(toast);
+
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove(), 300);
+      }, 3200);
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initApp);
+    } else {
+      initApp();
+    }
+  </script>
+</body>
+</html>
