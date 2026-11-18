@@ -42,17 +42,17 @@
   <div id="toast-container" class="fixed bottom-4 right-4 z-[70] flex flex-col gap-2 pointer-events-none"></div>
 
   <!-- =========================================================
-       TELA DE SELEÇÃO DE PERFIL / LOGIN / 1º ACESSO
+       TELA DE LOGIN PRIVADO (NOME + PIN / 1º ACESSO)
   ========================================================== -->
   <div id="auth-screen" class="flex-1 flex items-center justify-center p-4 sm:p-6 bg-gradient-to-br from-slate-900 via-slate-800 to-emerald-950">
-    <div class="max-w-2xl w-full bg-white rounded-3xl shadow-2xl border border-slate-200/80 overflow-hidden">
+    <div class="max-w-md w-full bg-white rounded-3xl shadow-2xl border border-slate-200/80 overflow-hidden">
       <div class="p-6 sm:p-8 bg-slate-900 text-white text-center relative overflow-hidden">
         <div class="w-12 h-12 rounded-2xl bg-emerald-500 text-slate-950 font-display font-extrabold text-2xl flex items-center justify-center mx-auto mb-3 shadow-lg">
           C.
         </div>
-        <h1 class="font-display text-2xl sm:text-3xl font-extrabold tracking-tight">Cartão — Divisão Transparente</h1>
-        <p class="text-slate-300 text-xs sm:text-sm mt-1.5 max-w-md mx-auto">
-          Selecione seu perfil para consultar apenas os seus gastos, acompanhar parcelas futuras e conferir o rateio.
+        <h1 class="font-display text-2xl font-extrabold tracking-tight">Cartão — Divisão Transparente</h1>
+        <p class="text-slate-300 text-xs sm:text-sm mt-1.5">
+          Informe seu nome e seu PIN pessoal para acessar sua planilha individual.
         </p>
         <div class="mt-3 flex justify-center">
           <span id="login-cloud-badge" class="inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
@@ -62,93 +62,99 @@
         </div>
       </div>
 
-      <div class="p-6 sm:p-8 space-y-6">
-        <div>
-          <p class="text-xs font-bold uppercase tracking-wider text-slate-500 mb-3 text-center">Quem está acessando?</p>
-          <div id="login-profiles-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
-            <!-- Perfis renderizados via JS -->
-          </div>
-        </div>
-
-        <!-- Caixa de PIN / Primeiro Acesso -->
-        <div id="login-pin-box" class="hidden bg-slate-50 border border-slate-200 rounded-2xl p-4 sm:p-5 space-y-4">
-          <div class="flex items-center justify-between">
-            <div class="flex items-center gap-3">
-              <div id="selected-user-avatar" class="w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm"></div>
-              <div>
-                <h3 id="selected-user-name" class="font-display font-bold text-slate-900 text-sm"></h3>
-                <p id="selected-user-role" class="text-xs text-slate-500"></p>
-              </div>
+      <div class="p-6 sm:p-8 space-y-5">
+        <!-- Formulário Principal de Login (Nome + PIN) -->
+        <form id="login-form" onsubmit="handleLoginSubmit(event)" class="space-y-4">
+          <div>
+            <label for="login-name-input" class="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">Seu Nome</label>
+            <div class="relative">
+              <i data-lucide="user" class="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2"></i>
+              <input
+                type="text"
+                id="login-name-input"
+                autocomplete="username"
+                placeholder="Digite seu nome cadastrado"
+                oninput="handleLoginNameTyping()"
+                class="w-full pl-10 pr-3.5 py-2.5 bg-slate-50 focus:bg-white border border-slate-300 rounded-xl text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition"
+                required
+              />
             </div>
-            <button type="button" onclick="cancelPinSelection()" class="text-xs font-semibold text-slate-500 hover:text-slate-800 px-2.5 py-1 rounded-lg hover:bg-slate-200/70">
-              Trocar perfil
+          </div>
+
+          <div id="login-pin-field-wrapper">
+            <label for="pin-input" class="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">Senha PIN (4 dígitos)</label>
+            <div class="relative">
+              <i data-lucide="lock" class="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2"></i>
+              <input
+                type="password"
+                id="pin-input"
+                maxlength="4"
+                inputmode="numeric"
+                pattern="[0-9]*"
+                autocomplete="current-password"
+                placeholder="••••"
+                class="w-full pl-10 pr-3.5 py-2.5 bg-slate-50 focus:bg-white border border-slate-300 rounded-xl text-sm font-bold tracking-widest text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition"
+              />
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            class="w-full py-3 px-5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-sm rounded-xl transition flex items-center justify-center gap-2 shadow-sm"
+          >
+            <span>Acessar Minha Planilha</span>
+            <i data-lucide="arrow-right" class="w-4 h-4 text-emerald-400"></i>
+          </button>
+        </form>
+
+        <!-- Formulário de Primeiro Acesso (Exibido automaticamente se o usuário ainda não tem PIN) -->
+        <form id="first-access-form" onsubmit="handleFirstAccessSubmit(event)" class="hidden space-y-3 bg-slate-50 border border-slate-200 rounded-2xl p-4">
+          <div class="flex items-center justify-between">
+            <span id="first-access-user-label" class="text-xs font-extrabold text-slate-900"></span>
+            <button type="button" onclick="resetLoginToDefault()" class="text-xs font-semibold text-slate-500 hover:text-slate-800">
+              Voltar
             </button>
           </div>
-
-          <!-- Formulário de Login Normal -->
-          <form id="login-form" onsubmit="handleLoginSubmit(event)" class="flex flex-col sm:flex-row gap-2">
+          <div class="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-center gap-2">
+            <i data-lucide="key-round" class="w-4 h-4 text-amber-600 shrink-0"></i>
+            <span><strong>Primeiro Acesso:</strong> Crie sua senha PIN de 4 dígitos para proteger seu perfil.</span>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <input
               type="password"
-              id="pin-input"
+              id="new-pin-input"
               maxlength="4"
               inputmode="numeric"
-              pattern="[0-9]*"
-              placeholder="Digite seu PIN (4 dígitos)"
-              class="flex-1 px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+              pattern="\d{4}"
+              placeholder="Novo PIN (4 números)"
+              class="px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500"
               required
             />
-            <button
-              type="submit"
-              class="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-sm rounded-xl transition flex items-center justify-center gap-2 shadow-sm"
-            >
-              <span>Entrar</span>
-              <i data-lucide="arrow-right" class="w-4 h-4"></i>
-            </button>
-          </form>
+            <input
+              type="password"
+              id="confirm-pin-input"
+              maxlength="4"
+              inputmode="numeric"
+              pattern="\d{4}"
+              placeholder="Confirmar PIN"
+              class="px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              required
+            />
+          </div>
+          <button
+            type="submit"
+            class="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-xl transition flex items-center justify-center gap-2 shadow-sm"
+          >
+            <i data-lucide="check-circle-2" class="w-4 h-4"></i>
+            <span>Cadastrar PIN e Entrar</span>
+          </button>
+        </form>
 
-          <!-- Formulário de Primeiro Acesso (Criar próprio PIN) -->
-          <form id="first-access-form" onsubmit="handleFirstAccessSubmit(event)" class="hidden space-y-2.5">
-            <div class="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-center gap-2">
-              <i data-lucide="key-round" class="w-4 h-4 text-amber-600 shrink-0"></i>
-              <span><strong>Primeiro Acesso:</strong> Crie seu PIN pessoal de 4 dígitos para proteger sua planilha.</span>
-            </div>
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <input
-                type="password"
-                id="new-pin-input"
-                maxlength="4"
-                inputmode="numeric"
-                pattern="\d{4}"
-                placeholder="Novo PIN (4 números)"
-                class="px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                required
-              />
-              <input
-                type="password"
-                id="confirm-pin-input"
-                maxlength="4"
-                inputmode="numeric"
-                pattern="\d{4}"
-                placeholder="Confirmar PIN"
-                class="px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                required
-              />
-            </div>
-            <button
-              type="submit"
-              class="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-xl transition flex items-center justify-center gap-2 shadow-sm"
-            >
-              <i data-lucide="check-circle-2" class="w-4 h-4"></i>
-              <span>Salvar Meu PIN e Entrar</span>
-            </button>
-          </form>
+        <p id="login-error" class="hidden text-xs text-rose-600 font-semibold text-center bg-rose-50 border border-rose-200 rounded-xl p-2.5"></p>
 
-          <p id="login-error" class="hidden text-xs text-rose-600 font-medium mt-2"></p>
-        </div>
-
-        <div class="text-center">
+        <div class="text-center pt-1">
           <p class="text-[11px] text-slate-400">
-            Cada participante possui seu próprio PIN • Novos usuários cadastram sua senha no 1º acesso.
+            Acesso individual e privado • Vencimento todo dia 07
           </p>
         </div>
       </div>
@@ -266,13 +272,13 @@
             <p id="kpi-my-diff" class="text-xs mt-1.5 font-medium text-slate-500">Calculando variação...</p>
           </div>
 
-          <div class="bg-white rounded-2xl p-5 border border-slate-200/90 shadow-sm">
+          <div id="kpi-status-card" class="bg-white rounded-2xl p-5 border border-slate-200/90 shadow-sm transition">
             <div class="flex items-center justify-between text-slate-500 mb-2">
-              <span class="text-xs font-semibold uppercase tracking-wider">Status do Acerto</span>
-              <span class="p-2 rounded-xl bg-amber-50 text-amber-600"><i data-lucide="clock" class="w-4 h-4"></i></span>
+              <span class="text-xs font-semibold uppercase tracking-wider">Prazo & Acerto (Dia 07)</span>
+              <span id="kpi-my-status-icon" class="p-2 rounded-xl bg-amber-50 text-amber-600"><i data-lucide="clock" class="w-4 h-4"></i></span>
             </div>
-            <p id="kpi-my-status" class="font-display text-2xl font-extrabold text-slate-900">Pendente</p>
-            <p id="kpi-my-status-sub" class="text-xs mt-1.5 text-slate-500">Aguardando fechamento/pagamento</p>
+            <p id="kpi-my-status" class="font-display text-xl sm:text-2xl font-extrabold text-slate-900">Pendente</p>
+            <p id="kpi-my-status-sub" class="text-xs mt-1.5 text-slate-500">Vencimento todo dia 07</p>
           </div>
 
           <div class="bg-white rounded-2xl p-5 border border-slate-200/90 shadow-sm">
@@ -280,7 +286,7 @@
               <span class="text-xs font-semibold uppercase tracking-wider">Compras Compartilhadas</span>
               <span class="p-2 rounded-xl bg-indigo-50 text-indigo-600"><i data-lucide="users" class="w-4 h-4"></i></span>
             </div>
-            <p id="kpi-my-count" class="font-display text-2xl font-extrabold text-slate-900 tabular-nums">0 itens</p>
+            <p id="kpi-my-count" class="font-display text-2xl sm:text-3xl font-extrabold text-slate-900 tabular-nums">0 itens</p>
             <p id="kpi-my-installments" class="text-xs mt-1.5 text-slate-500">0 parcelados neste mês</p>
           </div>
 
@@ -503,12 +509,12 @@
 
         <!-- Cards de Acerto de Contas -->
         <div>
-          <div class="flex items-center justify-between mb-3">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-3">
             <h3 class="font-display font-bold text-slate-900 text-base flex items-center gap-2">
               <i data-lucide="banknote" class="w-4 h-4 text-emerald-600"></i>
               <span>Resumo de Acerto por Participante (<span id="admin-settlement-month"></span>)</span>
             </h3>
-            <span class="text-xs text-slate-500">Clique em "Cobrar WhatsApp" para copiar o resumo pronto</span>
+            <span id="admin-due-date-info" class="text-xs font-semibold text-slate-500">Vencimento todo dia 07</span>
           </div>
           <div id="admin-settlement-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"></div>
         </div>
@@ -1099,7 +1105,7 @@
       pdfTargets: {},
       disputes: [],
       currentUser: null,
-      selectedProfileForLogin: null,
+      firstAccessUser: null,
       activeTab: 'sheet',
       selectedMonth: '2026-11',
       selectedCard: 'ALL',
@@ -1114,12 +1120,20 @@
     };
 
     // ---------------------------------------------------------
-    // UTILITÁRIOS DE FORMATAÇÃO E DATAS
+    // UTILITÁRIOS DE FORMATAÇÃO, DATAS E PRAZO (DIA 07)
     // ---------------------------------------------------------
     function refreshIcons() {
       if (window.lucide) {
         window.lucide.createIcons();
       }
+    }
+
+    function normalizeText(str) {
+      return String(str || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .trim()
+        .toLowerCase();
     }
 
     function renderUserAvatarInner(user) {
@@ -1159,6 +1173,89 @@
       const [sy, sm] = startYM.split('-').map(Number);
       const [ty, tm] = targetYM.split('-').map(Number);
       return (ty - sy) * 12 + (tm - sm);
+    }
+
+    /**
+     * Calcula o status do vencimento (sempre dia 07 do mês seguinte à fatura).
+     * Ex: Fatura de 2026-11 vence em 07/12/2026.
+     */
+    function getDueDateStatus(ym, isPaid, hasBalance) {
+      const dueYM = addMonthsToYM(ym, 1);
+      const [dueY, dueM] = dueYM.split('-').map(Number);
+      const dueDate = new Date(dueY, dueM - 1, 7, 0, 0, 0, 0);
+      const dueDateStr = `07/${String(dueM).padStart(2, '0')}/${dueY}`;
+
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+
+      const msPerDay = 1000 * 60 * 60 * 24;
+      const diffDays = Math.round((dueDate.getTime() - today.getTime()) / msPerDay);
+
+      if (!hasBalance) {
+        return {
+          state: 'EMPTY',
+          dueDateStr,
+          diffDays,
+          title: 'Sem Pendências',
+          subtitle: `Vencimento padrão: ${dueDateStr}`,
+          badgeText: 'Sem saldo'
+        };
+      }
+
+      if (isPaid) {
+        return {
+          state: 'PAID',
+          dueDateStr,
+          diffDays,
+          title: 'Pago ✓',
+          subtitle: `Quitado (vencimento em ${dueDateStr})`,
+          badgeText: 'Pago ✓'
+        };
+      }
+
+      if (diffDays > 1) {
+        return {
+          state: 'ON_TIME',
+          dueDateStr,
+          diffDays,
+          title: `Faltam ${diffDays} dias`,
+          subtitle: `Vence dia ${dueDateStr}`,
+          badgeText: `Faltam ${diffDays}d (07/${String(dueM).padStart(2, '0')})`
+        };
+      }
+
+      if (diffDays === 1) {
+        return {
+          state: 'WARNING',
+          dueDateStr,
+          diffDays,
+          title: 'Vence amanhã!',
+          subtitle: `Prazo final: ${dueDateStr}`,
+          badgeText: 'Vence amanhã'
+        };
+      }
+
+      if (diffDays === 0) {
+        return {
+          state: 'DUE_TODAY',
+          dueDateStr,
+          diffDays,
+          title: 'Vence hoje!',
+          subtitle: `Último dia para pagar (${dueDateStr})`,
+          badgeText: 'Vence hoje'
+        };
+      }
+
+      const overdueDays = Math.abs(diffDays);
+      return {
+        state: 'OVERDUE',
+        dueDateStr,
+        diffDays,
+        overdueDays,
+        title: 'Pagamento Vencido',
+        subtitle: `Venceu em ${dueDateStr} (atrasado há ${overdueDays} ${overdueDays === 1 ? 'dia' : 'dias'})`,
+        badgeText: `Vencido há ${overdueDays}d`
+      };
     }
 
     function parsePlanilhaDate(rawDate, refYear = '2026') {
@@ -1329,12 +1426,9 @@
                 updateHeaderUserUI();
               }
               renderCurrentView();
-            } else {
-              renderLoginProfiles();
             }
             refreshIcons();
           } else {
-            // Primeiro acesso ao banco vazio na nuvem: envia os dados iniciais/locais
             saveAllData();
           }
         },
@@ -1347,114 +1441,91 @@
 
     function initApp() {
       loadLocalFallbackData();
-      renderLoginProfiles();
       refreshIcons();
       subscribeToFirebaseRealtime();
     }
 
     // ---------------------------------------------------------
-    // AUTENTICAÇÃO, 1º ACESSO E ALTERAÇÃO DE PIN
+    // AUTENTICAÇÃO PRIVADA (NOME + PIN / 1º ACESSO)
     // ---------------------------------------------------------
-    function renderLoginProfiles() {
-      const grid = document.getElementById('login-profiles-grid');
-      if (!grid) return;
-
-      grid.innerHTML = state.users.map(u => {
-        const isSelected = state.selectedProfileForLogin && state.selectedProfileForLogin.id === u.id;
-        return `
-          <button
-            type="button"
-            onclick="selectProfileForLogin('${u.id}')"
-            class="p-3 rounded-2xl border text-center transition flex flex-col items-center gap-1.5 ${
-              isSelected
-                ? 'border-emerald-500 bg-emerald-50/70 ring-2 ring-emerald-500/30'
-                : 'border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50'
-            } ${u.blocked ? 'opacity-50' : ''}"
-          >
-            <div class="w-11 h-11 rounded-full ${u.bg} ${u.text} flex items-center justify-center font-display font-extrabold text-sm shadow-sm overflow-hidden">
-              ${renderUserAvatarInner(u)}
-            </div>
-            <span class="text-xs font-bold text-slate-900 truncate max-w-full">${u.name}</span>
-            <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full ${
-              u.blocked
-                ? 'bg-rose-100 text-rose-700'
-                : (!u.pinConfigured ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-600')
-            }">
-              ${u.blocked ? 'Bloqueado' : (!u.pinConfigured ? '1º Acesso' : (u.role === 'ADMIN' ? 'Admin' : 'Entrar'))}
-            </span>
-          </button>
-        `;
-      }).join('');
+    function findUserByTypedName(typedName) {
+      const norm = normalizeText(typedName);
+      if (!norm) return null;
+      return state.users.find(u => {
+        const uNorm = normalizeText(u.name);
+        const uClean = normalizeText(u.name.replace(/\(agregado\)/gi, ''));
+        return uNorm === norm || uClean === norm || normalizeText(u.id) === norm;
+      }) || null;
     }
 
-    function selectProfileForLogin(userId) {
-      const user = state.users.find(u => u.id === userId);
-      if (!user) return;
-
-      if (user.blocked) {
-        showToast('Este perfil está temporariamente bloqueado pelo Administrador.', 'error');
-        return;
-      }
-
-      state.selectedProfileForLogin = user;
-      renderLoginProfiles();
-
-      const box = document.getElementById('login-pin-box');
-      const avatar = document.getElementById('selected-user-avatar');
-      const nameEl = document.getElementById('selected-user-name');
-      const roleEl = document.getElementById('selected-user-role');
-      const loginForm = document.getElementById('login-form');
-      const firstForm = document.getElementById('first-access-form');
+    function handleLoginNameTyping() {
       const errEl = document.getElementById('login-error');
-
-      box.classList.remove('hidden');
-      errEl.classList.add('hidden');
-
-      avatar.className = `w-10 h-10 rounded-full ${user.bg} ${user.text} flex items-center justify-center font-bold text-sm overflow-hidden`;
-      avatar.innerHTML = renderUserAvatarInner(user);
-      nameEl.textContent = user.name;
-      roleEl.textContent = user.role === 'ADMIN' ? 'Administrador da Fatura' : 'Participante';
-
-      if (!user.pinConfigured) {
-        loginForm.classList.add('hidden');
-        firstForm.classList.remove('hidden');
-        document.getElementById('new-pin-input').value = '';
-        document.getElementById('confirm-pin-input').value = '';
-        setTimeout(() => document.getElementById('new-pin-input').focus(), 50);
-      } else {
-        firstForm.classList.add('hidden');
-        loginForm.classList.remove('hidden');
-        document.getElementById('pin-input').value = '';
-        setTimeout(() => document.getElementById('pin-input').focus(), 50);
-      }
-      refreshIcons();
+      if (errEl) errEl.classList.add('hidden');
     }
 
-    function cancelPinSelection() {
-      state.selectedProfileForLogin = null;
-      document.getElementById('login-pin-box').classList.add('hidden');
-      renderLoginProfiles();
+    function resetLoginToDefault() {
+      state.firstAccessUser = null;
+      document.getElementById('first-access-form').classList.add('hidden');
+      document.getElementById('login-form').classList.remove('hidden');
+      document.getElementById('login-error').classList.add('hidden');
+      document.getElementById('pin-input').value = '';
+      document.getElementById('login-name-input').focus();
     }
 
     function handleLoginSubmit(e) {
       e.preventDefault();
-      const user = state.selectedProfileForLogin;
-      if (!user) return;
-      const entered = document.getElementById('pin-input').value.trim();
+      const typedName = document.getElementById('login-name-input').value;
+      const enteredPin = document.getElementById('pin-input').value.trim();
       const errEl = document.getElementById('login-error');
 
-      if (entered === user.pin) {
-        errEl.classList.add('hidden');
-        completeLogin(user);
-      } else {
-        errEl.textContent = 'PIN incorreto. Tente novamente ou peça ao Alisson para resetar.';
+      const matchedUser = findUserByTypedName(typedName);
+      if (!matchedUser) {
+        errEl.textContent = 'Nome não encontrado. Verifique a digitação ou peça ao Alisson para cadastrar seu acesso.';
         errEl.classList.remove('hidden');
+        return;
+      }
+
+      if (matchedUser.blocked) {
+        errEl.textContent = 'Este acesso está temporariamente bloqueado pelo Administrador.';
+        errEl.classList.remove('hidden');
+        return;
+      }
+
+      // Se for primeiro acesso (ainda sem PIN configurado), abre o cadastro do PIN
+      if (!matchedUser.pinConfigured) {
+        state.firstAccessUser = matchedUser;
+        errEl.classList.add('hidden');
+        document.getElementById('login-form').classList.add('hidden');
+        document.getElementById('first-access-form').classList.remove('hidden');
+        document.getElementById('first-access-user-label').textContent = `Olá, ${matchedUser.name}!`;
+        document.getElementById('new-pin-input').value = '';
+        document.getElementById('confirm-pin-input').value = '';
+        refreshIcons();
+        setTimeout(() => document.getElementById('new-pin-input').focus(), 50);
+        return;
+      }
+
+      if (!enteredPin) {
+        errEl.textContent = 'Digite sua senha PIN de 4 dígitos para entrar.';
+        errEl.classList.remove('hidden');
+        document.getElementById('pin-input').focus();
+        return;
+      }
+
+      if (enteredPin === matchedUser.pin) {
+        errEl.classList.add('hidden');
+        completeLogin(matchedUser);
+      } else {
+        errEl.textContent = 'Senha PIN incorreta. Tente novamente ou peça ao Alisson para resetar.';
+        errEl.classList.remove('hidden');
+        document.getElementById('pin-input').value = '';
+        document.getElementById('pin-input').focus();
       }
     }
 
     function handleFirstAccessSubmit(e) {
       e.preventDefault();
-      const user = state.selectedProfileForLogin;
+      const user = state.firstAccessUser;
       if (!user) return;
       const p1 = document.getElementById('new-pin-input').value.trim();
       const p2 = document.getElementById('confirm-pin-input').value.trim();
@@ -1476,6 +1547,7 @@
         state.users[idx].pin = p1;
         state.users[idx].pinConfigured = true;
         saveAllData();
+        state.firstAccessUser = null;
         completeLogin(state.users[idx]);
         showToast('PIN cadastrado na nuvem! Bem-vindo(a)!', 'success');
       }
@@ -1488,7 +1560,6 @@
       document.getElementById('app-shell').classList.remove('hidden');
 
       updateHeaderUserUI();
-
       renderMainTabs();
       renderCurrentView();
       refreshIcons();
@@ -1641,11 +1712,12 @@
 
     function logout() {
       state.currentUser = null;
-      state.selectedProfileForLogin = null;
+      state.firstAccessUser = null;
       document.getElementById('app-shell').classList.add('hidden');
       document.getElementById('auth-screen').classList.remove('hidden');
-      document.getElementById('login-pin-box').classList.add('hidden');
-      renderLoginProfiles();
+      document.getElementById('login-name-input').value = '';
+      document.getElementById('pin-input').value = '';
+      resetLoginToDefault();
       refreshIcons();
     }
 
@@ -1760,7 +1832,7 @@
     }
 
     // ---------------------------------------------------------
-    // ABA 1: MINHA PLANILHA
+    // ABA 1: MINHA PLANILHA (COM CONTAGEM DE DIAS E VENCIMENTO DIA 07)
     // ---------------------------------------------------------
     function renderParticipantSheetTab() {
       const user = state.currentUser;
@@ -1816,21 +1888,56 @@
         }
       }
 
+      // Status do Vencimento (Todo dia 07)
       const payKey = `${ym}_${user.id}`;
       const isPaid = !!state.payments[payKey];
-      document.getElementById('kpi-my-status').textContent = myTotal === 0 ? 'Sem Pendências' : (isPaid ? 'Pago ✓' : 'Pendente');
-      document.getElementById('kpi-my-status').className = `font-display text-2xl font-extrabold ${
-        myTotal === 0 ? 'text-slate-700' : (isPaid ? 'text-emerald-600' : 'text-amber-600')
-      }`;
-      document.getElementById('kpi-my-status-sub').textContent = isPaid
-        ? 'Acerto confirmado pelo Alisson'
-        : 'Aguardando fechamento/transferência';
+      const dueInfo = getDueDateStatus(ym, isPaid, myTotal > 0);
+
+      const statusCard = document.getElementById('kpi-status-card');
+      const statusIcon = document.getElementById('kpi-my-status-icon');
+      const statusTitleEl = document.getElementById('kpi-my-status');
+      const statusSubEl = document.getElementById('kpi-my-status-sub');
+
+      statusTitleEl.textContent = dueInfo.title;
+      statusSubEl.textContent = dueInfo.subtitle;
+
+      if (dueInfo.state === 'PAID') {
+        statusCard.className = 'bg-white rounded-2xl p-5 border border-emerald-200 shadow-sm transition';
+        statusIcon.className = 'p-2 rounded-xl bg-emerald-50 text-emerald-600';
+        statusIcon.innerHTML = '<i data-lucide="check-circle-2" class="w-4 h-4"></i>';
+        statusTitleEl.className = 'font-display text-xl sm:text-2xl font-extrabold text-emerald-600';
+        statusSubEl.className = 'text-xs mt-1.5 font-medium text-emerald-700';
+      } else if (dueInfo.state === 'OVERDUE') {
+        statusCard.className = 'bg-rose-50/70 rounded-2xl p-5 border-2 border-rose-400 shadow-sm transition';
+        statusIcon.className = 'p-2 rounded-xl bg-rose-100 text-rose-700';
+        statusIcon.innerHTML = '<i data-lucide="alert-octagon" class="w-4 h-4"></i>';
+        statusTitleEl.className = 'font-display text-xl sm:text-2xl font-extrabold text-rose-700';
+        statusSubEl.className = 'text-xs mt-1.5 font-bold text-rose-700';
+      } else if (dueInfo.state === 'DUE_TODAY' || dueInfo.state === 'WARNING') {
+        statusCard.className = 'bg-amber-50/70 rounded-2xl p-5 border border-amber-300 shadow-sm transition';
+        statusIcon.className = 'p-2 rounded-xl bg-amber-100 text-amber-700';
+        statusIcon.innerHTML = '<i data-lucide="alarm-clock" class="w-4 h-4"></i>';
+        statusTitleEl.className = 'font-display text-xl sm:text-2xl font-extrabold text-amber-700';
+        statusSubEl.className = 'text-xs mt-1.5 font-semibold text-amber-800';
+      } else if (dueInfo.state === 'ON_TIME') {
+        statusCard.className = 'bg-white rounded-2xl p-5 border border-slate-200/90 shadow-sm transition';
+        statusIcon.className = 'p-2 rounded-xl bg-sky-50 text-sky-600';
+        statusIcon.innerHTML = '<i data-lucide="calendar-clock" class="w-4 h-4"></i>';
+        statusTitleEl.className = 'font-display text-xl sm:text-2xl font-extrabold text-slate-900';
+        statusSubEl.className = 'text-xs mt-1.5 font-semibold text-sky-700';
+      } else {
+        statusCard.className = 'bg-white rounded-2xl p-5 border border-slate-200/90 shadow-sm transition';
+        statusIcon.className = 'p-2 rounded-xl bg-slate-100 text-slate-500';
+        statusIcon.innerHTML = '<i data-lucide="clock" class="w-4 h-4"></i>';
+        statusTitleEl.className = 'font-display text-xl sm:text-2xl font-extrabold text-slate-700';
+        statusSubEl.className = 'text-xs mt-1.5 text-slate-500';
+      }
 
       const parceladosCount = myItems.filter(it => it.totalInstallments > 1).length;
       document.getElementById('kpi-my-count').textContent = `${myItems.length} ${myItems.length === 1 ? 'item' : 'itens'}`;
       document.getElementById('kpi-my-installments').textContent = `${parceladosCount} parcelado(s) neste mês`;
 
-      // Banner de status
+      // Banner de status (com alerta vermelho se vencido)
       const banner = document.getElementById('month-status-banner');
       if (myItems.length === 0) {
         banner.className = 'rounded-2xl p-4 border border-slate-200 bg-white flex flex-col sm:flex-row sm:items-center justify-between gap-3';
@@ -1843,6 +1950,17 @@
             </div>
           </div>
         `;
+      } else if (dueInfo.state === 'OVERDUE') {
+        banner.className = 'rounded-2xl p-4 border-2 border-rose-400 bg-rose-50 flex flex-col sm:flex-row sm:items-center justify-between gap-3';
+        banner.innerHTML = `
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-rose-600 text-white flex items-center justify-center shrink-0 shadow-sm"><i data-lucide="alert-triangle" class="w-5 h-5"></i></div>
+            <div>
+              <p class="text-xs sm:text-sm font-extrabold text-rose-900">Atenção, ${user.name}: Seu pagamento está vencido!</p>
+              <p class="text-xs text-rose-800">O prazo do dia <strong>${dueInfo.dueDateStr}</strong> já passou (atraso de <strong>${dueInfo.overdueDays} ${dueInfo.overdueDays === 1 ? 'dia' : 'dias'}</strong>). Regularize o valor de <strong>${formatBRL(myTotal)}</strong> com o Alisson.</p>
+            </div>
+          </div>
+        `;
       } else {
         banner.className = `rounded-2xl p-4 border ${user.border} ${user.bg} flex flex-col sm:flex-row sm:items-center justify-between gap-3`;
         banner.innerHTML = `
@@ -1850,7 +1968,7 @@
             <div class="w-9 h-9 rounded-xl bg-white/80 ${user.text} flex items-center justify-center font-bold text-xs shrink-0 overflow-hidden">${renderUserAvatarInner(user)}</div>
             <div>
               <p class="text-xs sm:text-sm font-bold ${user.text}">Planilha Individual de ${user.name} • ${formatMonthLabel(ym)}</p>
-              <p class="text-xs text-slate-700">Você participa de <strong>${myItems.length}</strong> compra(s) neste mês. Clique em "Como foi dividido" para ver os detalhes do rateio.</p>
+              <p class="text-xs text-slate-700">Você participa de <strong>${myItems.length}</strong> compra(s) neste mês • Vencimento em <strong>${dueInfo.dueDateStr}</strong>.</p>
             </div>
           </div>
         `;
@@ -2245,6 +2363,12 @@
       const ym = state.selectedMonth;
       document.getElementById('admin-settlement-month').textContent = formatMonthLabel(ym);
 
+      const sampleDue = getDueDateStatus(ym, false, true);
+      const dueInfoEl = document.getElementById('admin-due-date-info');
+      if (dueInfoEl) {
+        dueInfoEl.textContent = `Vencimento desta fatura: ${sampleDue.dueDateStr}`;
+      }
+
       const monthItems = getItemsForMonth(ym, state.selectedCard);
       const purchasesTotal = monthItems.filter(it => it.monthlyTotal > 0).reduce((s, it) => s + it.monthlyTotal, 0);
       const refundsTotal = monthItems.filter(it => it.monthlyTotal < 0).reduce((s, it) => s + it.monthlyTotal, 0);
@@ -2265,21 +2389,23 @@
       }
       updateAdminPdfDiffBadge(rawTotal, savedTarget);
 
-      // Grid de Acerto por Participante
+      // Grid de Acerto por Participante (com sinalização de Vencido)
       const settlementGrid = document.getElementById('admin-settlement-grid');
       settlementGrid.innerHTML = state.users.map(u => {
         const userTotal = monthItems.reduce((s, it) => s + getUserShareForExpense(it, u.id), 0);
         const payKey = `${ym}_${u.id}`;
         const isPaid = !!state.payments[payKey];
         const isAdmin = u.role === 'ADMIN';
+        const dueStatus = getDueDateStatus(ym, isPaid, userTotal > 0);
+        const isOverdue = !isAdmin && dueStatus.state === 'OVERDUE';
 
         return `
-          <div class="bg-white rounded-2xl border ${u.border} p-4 shadow-sm flex flex-col justify-between gap-3">
-            <div class="flex items-center justify-between">
-              <div class="flex items-center gap-2.5">
+          <div class="bg-white rounded-2xl border ${isOverdue ? 'border-rose-400 ring-2 ring-rose-500/20' : u.border} p-4 shadow-sm flex flex-col justify-between gap-3">
+            <div class="flex items-center justify-between gap-2">
+              <div class="flex items-center gap-2.5 min-w-0">
                 <span class="w-9 h-9 rounded-full ${u.bg} ${u.text} flex items-center justify-center font-bold text-xs overflow-hidden shrink-0">${renderUserAvatarInner(u)}</span>
-                <div>
-                  <h4 class="font-display font-bold text-slate-900 text-sm">${u.name}</h4>
+                <div class="min-w-0">
+                  <h4 class="font-display font-bold text-slate-900 text-sm truncate">${u.name}</h4>
                   <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full ${u.bg} ${u.text}">${isAdmin ? 'Admin' : (u.isCore ? 'Fixo' : 'Agregado')}</span>
                 </div>
               </div>
@@ -2287,19 +2413,32 @@
                 <button
                   type="button"
                   onclick="toggleUserPaymentStatus('${u.id}')"
-                  class="text-[11px] font-bold px-2.5 py-1 rounded-full border transition ${
+                  class="text-[11px] font-bold px-2.5 py-1 rounded-full border transition shrink-0 ${
                     isPaid
                       ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
-                      : 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100'
+                      : (isOverdue
+                          ? 'bg-rose-100 text-rose-800 border-rose-300 hover:bg-rose-200'
+                          : 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100')
                   }"
                 >
-                  ${isPaid ? 'Pago ✓' : 'Marcar Pago'}
+                  ${isPaid ? 'Pago ✓' : (isOverdue ? 'Vencido • Pagar' : 'Marcar Pago')}
                 </button>
               ` : ''}
             </div>
 
             <div>
-              <span class="text-[11px] text-slate-500 block">Total no mês</span>
+              <div class="flex items-center justify-between">
+                <span class="text-[11px] text-slate-500">Total no mês</span>
+                ${!isAdmin && userTotal > 0 ? `
+                  <span class="text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                    isPaid
+                      ? 'bg-emerald-50 text-emerald-700'
+                      : (isOverdue ? 'bg-rose-100 text-rose-700' : 'bg-slate-100 text-slate-600')
+                  }">
+                    ${dueStatus.badgeText}
+                  </span>
+                ` : ''}
+              </div>
               <span class="font-display text-xl font-extrabold text-slate-900 tabular-nums">${formatBRL(userTotal)}</span>
             </div>
 
@@ -2307,10 +2446,10 @@
               <button
                 type="button"
                 onclick="copyWhatsAppBilling('${u.id}')"
-                class="w-full py-2 px-3 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition"
+                class="w-full py-2 px-3 ${isOverdue ? 'bg-rose-600 hover:bg-rose-700' : 'bg-slate-900 hover:bg-slate-800'} text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition"
               >
-                <i data-lucide="message-circle" class="w-3.5 h-3.5 text-emerald-400"></i>
-                <span>Cobrar WhatsApp</span>
+                <i data-lucide="message-circle" class="w-3.5 h-3.5 ${isOverdue ? 'text-white' : 'text-emerald-400'}"></i>
+                <span>${isOverdue ? 'Cobrar Vencido (WhatsApp)' : 'Cobrar WhatsApp'}</span>
               </button>
             ` : `<div class="text-[11px] text-slate-400 text-center py-1">${isAdmin ? 'Titular dos cartões' : 'Sem saldo a cobrar'}</div>`}
           </div>
@@ -2439,6 +2578,8 @@
       const items = getItemsForMonth(ym, state.selectedCard).filter(it => it.participants && it.participants.includes(userId));
       const total = items.reduce((s, it) => s + getUserShareForExpense(it, userId), 0);
       const admin = state.users.find(u => u.role === 'ADMIN');
+      const payKey = `${ym}_${userId}`;
+      const dueStatus = getDueDateStatus(ym, !!state.payments[payKey], total > 0);
 
       const lines = items.map(it => {
         const share = getUserShareForExpense(it, userId);
@@ -2446,7 +2587,11 @@
         return `• ${formatDateBR(it.date)} - ${it.description}${parc}: *${formatBRL(share)}*`;
       });
 
-      const msg = `Olá *${user.name}*! Segue o resumo da sua parte no cartão referente a *${formatMonthLabel(ym)}*:\n\n${lines.join('\n')}\n\n*Total a pagar: ${formatBRL(total)}*\nPIX Alisson: ${admin?.pixKey || 'alisson.cartao@pix.com.br'}`;
+      const statusLine = dueStatus.state === 'OVERDUE'
+        ? `⚠️ *Status: Pagamento vencido desde ${dueStatus.dueDateStr}*`
+        : `📅 *Vencimento: ${dueStatus.dueDateStr}*`;
+
+      const msg = `Olá *${user.name}*! Segue o resumo da sua parte no cartão referente a *${formatMonthLabel(ym)}*:\n\n${lines.join('\n')}\n\n*Total a pagar: ${formatBRL(total)}*\n${statusLine}\nPIX Alisson: ${admin?.pixKey || 'alisson.cartao@pix.com.br'}`;
       copyTextFallback(msg, `Resumo de ${user.name} copiado para o WhatsApp!`);
     }
 
