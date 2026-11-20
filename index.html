@@ -3210,7 +3210,7 @@
 
     function copyAlissonPix() {
       const admin = state.users.find(u => u.role === 'ADMIN');
-      const pix = admin?.pixKey || 'alisson.cartao@pix.com.br';
+      const pix = admin?.pixKey || 48991342901;
       copyTextFallback(pix, `Chave PIX copiada: ${pix}`);
     }
 
@@ -3234,7 +3234,7 @@
         ? `⚠️ *Status: Pagamento vencido desde ${dueStatus.dueDateStr}*`
         : `📅 *Vencimento: ${dueStatus.dueDateStr}*`;
 
-      const msg = `Olá *${user.name}*! Segue o resumo da sua parte no cartão referente a *${formatMonthLabel(ym)}*:\n\n${lines.join('\n')}\n\n*Total a pagar: ${formatBRL(total)}*\n${statusLine}\nPIX Alisson: ${admin?.pixKey || 'alisson.cartao@pix.com.br'}`;
+      const msg = `Olá *${user.name}*! Segue o resumo da sua parte no cartão referente a *${formatMonthLabel(ym)}*:\n\n${lines.join('\n')}\n\n*Total a pagar: ${formatBRL(total)}*\n${statusLine}\nPIX Alisson: ${admin?.pixKey || 48991342901}`;
       copyTextFallback(msg, `Resumo de ${user.name} copiado para o WhatsApp!`);
     }
 
