@@ -1,27 +1,3 @@
-Todas as 10 melhorias solicitadas foram implementadas no seu `index.html`, mantendo a integração completa com o **Firebase Firestore (`cartao-fatura`)** e o login privado por nome e PIN.
-
-### Resumo das 10 atualizações incluídas neste código:
-
-1. **Campo "Total da Fatura PDF (R$)" corrigido:** Aceita vírgulas e pontos (`5076,48`, `5.076,48`, `5076.48`) sem travar ou arredondar os centavos.
-2. **Download em Excel (`.xlsx`):**
-* Na aba **Minha Planilha**: botão **"Baixar Excel (.xlsx)"** com a planilha individual de cada participante.
-* No **Painel Admin**: botão **"Exportar Excel Geral"** com 2 abas (*Fatura Bruta Completa* e *Resumo por Participante*).
-
-
-3. **Visão Detalhada de Cada Participante no Painel Admin:** Ao clicar em qualquer card do **"Resumo de Acerto por Participante"**, abre um modal mostrando exatamente a planilha individual daquela pessoa (data, estabelecimento, cartão, parcela, valor total, divisão e sua cota) + botão para baixar o Excel dela.
-4. **Somatório Separado por Cartão + Total Geral:** No painel de conferência do Admin, agora aparecem os cards individuais de **Cartão 1 (Principal)** e **Cartão 2 (Secundário)** ao lado de Compras, Reembolsos e Total Líquido.
-5. **Leitura de Prints e Imagens via OCR (`Tesseract.js`):** O importador agora aceita `.PNG`, `.JPG`, `.JPEG` e `.WEBP`, lendo automaticamente os lançamentos de prints do celular.
-6. **Download da Fatura Original Exclusivo para a Emillyn:** Quando você faz upload do PDF/imagem da fatura no mês, ele fica salvo na nuvem (até ~700 KB) e aparece exclusivamente no perfil da **Emillyn** o botão **"Baixar Fatura Original"** (ou o aviso *"A fatura ainda não foi postada ou fechada"* enquanto não houver envio).
-7. **Indicador de Última Atualização de Gastos:** Todos os usuários visualizam no banner da planilha a data e hora exatas da última movimentação de lançamentos no sistema.
-8. **Edição, Exclusão e Histórico de Contestações:** Usuários podem editar ou excluir suas contestações abertas; no Painel Admin, o histórico completo (abertas, editadas, resolvidas e excluídas) permanece visível para você.
-9. **Botão "Marcar Pago" Habilitado para o Administrador:** O card do **Alisson** no Resumo de Acerto agora também possui o botão **"Marcar Pago / Pago ✓"**, eliminando o falso alerta de atraso.
-10. **Atalho Inteligente para Google Maps (Florianópolis e Região):** Cada estabelecimento na planilha tem o botão de localização (ícone de pino) que limpa códigos bancários (`MP*`, `PAG*`, `IFD*`) e abre a pesquisa focada na Grande Florianópolis (`+ Florianopolis SC`).
-
----
-
-### Código Completo (`index.html`) — Copie e substitua no GitHub:
-
-```html
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -4547,5 +4523,3 @@ Todas as 10 melhorias solicitadas foram implementadas no seu `index.html`, mante
   </script>
 </body>
 </html>
-
-```
