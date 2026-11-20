@@ -1,3 +1,27 @@
+Todas as 10 melhorias solicitadas foram implementadas no seu `index.html`, mantendo a integração completa com o **Firebase Firestore (`cartao-fatura`)** e o login privado por nome e PIN.
+
+### Resumo das 10 atualizações incluídas neste código:
+
+1. **Campo "Total da Fatura PDF (R$)" corrigido:** Aceita vírgulas e pontos (`5076,48`, `5.076,48`, `5076.48`) sem travar ou arredondar os centavos.
+2. **Download em Excel (`.xlsx`):**
+* Na aba **Minha Planilha**: botão **"Baixar Excel (.xlsx)"** com a planilha individual de cada participante.
+* No **Painel Admin**: botão **"Exportar Excel Geral"** com 2 abas (*Fatura Bruta Completa* e *Resumo por Participante*).
+
+
+3. **Visão Detalhada de Cada Participante no Painel Admin:** Ao clicar em qualquer card do **"Resumo de Acerto por Participante"**, abre um modal mostrando exatamente a planilha individual daquela pessoa (data, estabelecimento, cartão, parcela, valor total, divisão e sua cota) + botão para baixar o Excel dela.
+4. **Somatório Separado por Cartão + Total Geral:** No painel de conferência do Admin, agora aparecem os cards individuais de **Cartão 1 (Principal)** e **Cartão 2 (Secundário)** ao lado de Compras, Reembolsos e Total Líquido.
+5. **Leitura de Prints e Imagens via OCR (`Tesseract.js`):** O importador agora aceita `.PNG`, `.JPG`, `.JPEG` e `.WEBP`, lendo automaticamente os lançamentos de prints do celular.
+6. **Download da Fatura Original Exclusivo para a Emillyn:** Quando você faz upload do PDF/imagem da fatura no mês, ele fica salvo na nuvem (até ~700 KB) e aparece exclusivamente no perfil da **Emillyn** o botão **"Baixar Fatura Original"** (ou o aviso *"A fatura ainda não foi postada ou fechada"* enquanto não houver envio).
+7. **Indicador de Última Atualização de Gastos:** Todos os usuários visualizam no banner da planilha a data e hora exatas da última movimentação de lançamentos no sistema.
+8. **Edição, Exclusão e Histórico de Contestações:** Usuários podem editar ou excluir suas contestações abertas; no Painel Admin, o histórico completo (abertas, editadas, resolvidas e excluídas) permanece visível para você.
+9. **Botão "Marcar Pago" Habilitado para o Administrador:** O card do **Alisson** no Resumo de Acerto agora também possui o botão **"Marcar Pago / Pago ✓"**, eliminando o falso alerta de atraso.
+10. **Atalho Inteligente para Google Maps (Florianópolis e Região):** Cada estabelecimento na planilha tem o botão de localização (ícone de pino) que limpa códigos bancários (`MP*`, `PAG*`, `IFD*`) e abre a pesquisa focada na Grande Florianópolis (`+ Florianopolis SC`).
+
+---
+
+### Código Completo (`index.html`) — Copie e substitua no GitHub:
+
+```html
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -16,6 +40,10 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <!-- PDF.js para leitura real de faturas em PDF -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <!-- Tesseract.js para leitura OCR de prints/imagens de fatura -->
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <!-- SheetJS (XLSX) para exportação real em Excel -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <!-- Firebase SDK (Compat para funcionamento direto no navegador) -->
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -39,7 +67,7 @@
 <body class="bg-slate-50 text-slate-900 font-sans antialiased min-h-screen flex flex-col">
 
   <!-- Container de Notificações (Toasts) -->
-  <div id="toast-container" class="fixed bottom-4 right-4 z-[70] flex flex-col gap-2 pointer-events-none"></div>
+  <div id="toast-container" class="fixed bottom-4 right-4 z-[80] flex flex-col gap-2 pointer-events-none"></div>
 
   <!-- =========================================================
        TELA DE LOGIN PRIVADO (NOME + PIN / 1º ACESSO)
@@ -63,7 +91,6 @@
       </div>
 
       <div class="p-6 sm:p-8 space-y-5">
-        <!-- Formulário Principal de Login (Nome + PIN) -->
         <form id="login-form" onsubmit="handleLoginSubmit(event)" class="space-y-4">
           <div>
             <label for="login-name-input" class="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">Seu Nome</label>
@@ -107,7 +134,7 @@
           </button>
         </form>
 
-        <!-- Formulário de Primeiro Acesso (Exibido automaticamente se o usuário ainda não tem PIN) -->
+        <!-- Formulário de Primeiro Acesso -->
         <form id="first-access-form" onsubmit="handleFirstAccessSubmit(event)" class="hidden space-y-3 bg-slate-50 border border-slate-200 rounded-2xl p-4">
           <div class="flex items-center justify-between">
             <span id="first-access-user-label" class="text-xs font-extrabold text-slate-900"></span>
@@ -261,6 +288,23 @@
       <section id="tab-sheet" class="space-y-6">
         <div id="month-status-banner" class="rounded-2xl p-4 border flex flex-col sm:flex-row sm:items-center justify-between gap-4"></div>
 
+        <!-- Card Exclusivo da Emillyn: Baixar Fatura Original postada pelo Admin -->
+        <div id="emillyn-invoice-box" class="hidden rounded-2xl p-4 sm:p-5 border border-rose-200 bg-gradient-to-r from-rose-50 via-white to-pink-50 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div class="flex items-start sm:items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-rose-100 text-rose-700 flex items-center justify-center shrink-0">
+              <i data-lucide="file-down" class="w-5 h-5"></i>
+            </div>
+            <div>
+              <div class="flex items-center gap-2 flex-wrap">
+                <h4 class="font-display font-bold text-slate-900 text-sm">Fatura Original do Cartão (<span id="emillyn-invoice-month-label"></span>)</h4>
+                <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-800">Acesso Exclusivo Emillyn</span>
+              </div>
+              <p id="emillyn-invoice-status-text" class="text-xs text-slate-600 mt-0.5"></p>
+            </div>
+          </div>
+          <div id="emillyn-invoice-action" class="shrink-0"></div>
+        </div>
+
         <!-- KPIs do Participante -->
         <div id="participant-kpis-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <div class="bg-white rounded-2xl p-5 border border-slate-200/90 shadow-sm">
@@ -316,10 +360,10 @@
                 <span>Planilha de Gastos — <span id="sheet-user-title"></span></span>
               </h3>
               <p class="text-xs text-slate-500 mt-0.5">
-                Exibindo somente os lançamentos que envolvem você, com valor original da compra e sua cota.
+                Exibindo somente os lançamentos que envolvem você. Clique no ícone <i data-lucide="map-pin" class="w-3 h-3 inline text-sky-600"></i> para ver o local na Grande Florianópolis.
               </p>
             </div>
-            <div class="flex items-center gap-2">
+            <div class="flex flex-wrap items-center gap-2">
               <div class="relative">
                 <i data-lucide="search" class="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
                 <input
@@ -330,6 +374,14 @@
                   class="pl-8 pr-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 />
               </div>
+              <button
+                type="button"
+                onclick="exportUserExcel(state.currentUser.id)"
+                class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-sm transition"
+              >
+                <i data-lucide="file-spreadsheet" class="w-3.5 h-3.5"></i>
+                <span>Baixar Excel (.xlsx)</span>
+              </button>
             </div>
           </div>
 
@@ -377,7 +429,7 @@
       </section>
 
       <!-- =====================================================
-           ABA 2B: CONTESTAÇÕES
+           ABA 2B: CONTESTAÇÕES (MEMBRO VÊ AS SUAS / ADMIN VÊ HISTÓRICO COMPLETO)
       ====================================================== -->
       <section id="tab-disputes" class="hidden space-y-6">
         <div class="bg-white rounded-2xl p-5 sm:p-6 border border-slate-200 shadow-sm">
@@ -385,11 +437,11 @@
             <div>
               <div class="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-800 bg-amber-100 px-2.5 py-1 rounded-full mb-2">
                 <i data-lucide="flag" class="w-3.5 h-3.5"></i>
-                <span>Revisão & Conferência</span>
+                <span>Revisão & Histórico</span>
               </div>
-              <h2 class="font-display text-xl font-bold text-slate-900">Lançamentos Contestados</h2>
-              <p class="text-xs sm:text-sm text-slate-500 mt-1">
-                Acompanhe aqui os lançamentos que foram sinalizados pelos participantes para revisão do rateio ou do valor.
+              <h2 class="font-display text-xl font-bold text-slate-900" id="disputes-tab-title">Lançamentos Contestados</h2>
+              <p class="text-xs sm:text-sm text-slate-500 mt-1" id="disputes-tab-subtitle">
+                Acompanhe aqui os lançamentos sinalizados para revisão. Você pode editar ou excluir suas contestações em aberto.
               </p>
             </div>
           </div>
@@ -446,7 +498,7 @@
             </div>
             <h2 class="font-display text-xl sm:text-2xl font-bold">Gestão de Faturas, Importação & Acerto de Contas</h2>
             <p class="text-slate-300 text-xs sm:text-sm mt-1">
-              Importe a fatura em PDF, divida cada compra interativamente e envie o resumo de cobrança para cada amigo.
+              Importe a fatura em PDF ou print de imagem, divida cada compra e clique nos cards abaixo para inspecionar o extrato detalhado de cada pessoa.
             </p>
           </div>
           <div class="flex flex-wrap gap-2.5">
@@ -456,7 +508,7 @@
             </button>
             <button type="button" onclick="openImportWizardModal()" class="px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white border border-white/20 font-semibold text-xs sm:text-sm rounded-xl flex items-center gap-2 transition">
               <i data-lucide="file-text" class="w-4 h-4 text-emerald-300"></i>
-              <span>Importar Fatura (PDF / CSV)</span>
+              <span>Importar Fatura (PDF / Print / CSV)</span>
             </button>
             <button type="button" onclick="openManagePeopleModal()" class="px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white border border-white/20 font-semibold text-xs sm:text-sm rounded-xl flex items-center gap-2 transition">
               <i data-lucide="shield-check" class="w-4 h-4 text-sky-300"></i>
@@ -469,36 +521,45 @@
           </div>
         </div>
 
-        <!-- Painel de Conferência Total da Fatura (Bater com PDF) -->
-        <div class="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-sm">
+        <!-- Painel de Conferência Total da Fatura (Separado por Cartão + Total Geral + Conferência PDF) -->
+        <div class="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-sm space-y-4">
           <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 flex-1">
+            <div class="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-3 flex-1">
+              <div class="p-3 rounded-xl bg-indigo-50/70 border border-indigo-200/80">
+                <span class="text-[11px] font-bold uppercase tracking-wider text-indigo-700 block">Cartão 1 (Principal)</span>
+                <span id="admin-check-card1" class="font-display text-lg font-extrabold text-indigo-950 tabular-nums">R$ 0,00</span>
+              </div>
+              <div class="p-3 rounded-xl bg-purple-50/70 border border-purple-200/80">
+                <span class="text-[11px] font-bold uppercase tracking-wider text-purple-700 block">Cartão 2 (Secundário)</span>
+                <span id="admin-check-card2" class="font-display text-lg font-extrabold text-purple-950 tabular-nums">R$ 0,00</span>
+              </div>
               <div class="p-3 rounded-xl bg-slate-50 border border-slate-200/80">
                 <span class="text-[11px] font-bold uppercase tracking-wider text-slate-500 block">Compras Lançadas (+)</span>
                 <span id="admin-check-purchases" class="font-display text-lg font-extrabold text-slate-900 tabular-nums">R$ 0,00</span>
               </div>
               <div class="p-3 rounded-xl bg-cyan-50/60 border border-cyan-200/80">
-                <span class="text-[11px] font-bold uppercase tracking-wider text-cyan-700 block">Reembolsos / Descontos (-)</span>
+                <span class="text-[11px] font-bold uppercase tracking-wider text-cyan-700 block">Reembolsos (-)</span>
                 <span id="admin-check-refunds" class="font-display text-lg font-extrabold text-cyan-700 tabular-nums">R$ 0,00</span>
               </div>
-              <div class="p-3 rounded-xl bg-emerald-50/70 border border-emerald-200">
-                <span class="text-[11px] font-bold uppercase tracking-wider text-emerald-800 block">Total Líquido no Sistema</span>
+              <div class="p-3 rounded-xl bg-emerald-50/80 border border-emerald-300">
+                <span class="text-[11px] font-bold uppercase tracking-wider text-emerald-800 block">Total Líquido Geral</span>
                 <span id="admin-check-net" class="font-display text-lg font-extrabold text-emerald-900 tabular-nums">R$ 0,00</span>
               </div>
             </div>
 
-            <div class="lg:w-80 p-3 rounded-xl bg-slate-900 text-white space-y-2">
+            <div class="lg:w-80 p-3 rounded-xl bg-slate-900 text-white space-y-2 shrink-0">
               <div class="flex items-center justify-between gap-2">
-                <label for="admin-pdf-target-input" class="text-[11px] font-bold uppercase tracking-wider text-slate-300">Total da Fatura PDF (R$)</label>
+                <label for="admin-pdf-target-input" class="text-[11px] font-bold uppercase tracking-wider text-slate-300">Total Fatura Original (R$)</label>
                 <span id="admin-pdf-diff-badge" class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-800 text-slate-300">Informe p/ conferir</span>
               </div>
               <div class="flex items-center gap-2">
                 <span class="text-xs font-bold text-slate-400">R$</span>
                 <input
-                  type="number"
-                  step="0.01"
+                  type="text"
+                  inputmode="decimal"
                   id="admin-pdf-target-input"
                   oninput="handleAdminPdfTargetChange(this.value)"
+                  onblur="formatAdminPdfTargetBlur()"
                   placeholder="Ex: 5076,48"
                   class="w-full px-2.5 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-sm font-extrabold text-white tabular-nums focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 />
@@ -514,7 +575,7 @@
               <i data-lucide="banknote" class="w-4 h-4 text-emerald-600"></i>
               <span>Resumo de Acerto por Participante (<span id="admin-settlement-month"></span>)</span>
             </h3>
-            <span id="admin-due-date-info" class="text-xs font-semibold text-slate-500">Vencimento todo dia 07</span>
+            <span id="admin-due-date-info" class="text-xs font-semibold text-slate-500">Clique no card de um participante para ver a planilha detalhada dele</span>
           </div>
           <div id="admin-settlement-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"></div>
         </div>
@@ -528,12 +589,22 @@
                 <span class="text-[11px] font-bold bg-rose-100 text-rose-700 px-2 py-0.5 rounded-full">Confidencial</span>
               </div>
               <p class="text-xs text-slate-500 mt-0.5">
-                Todos os lançamentos do mês nos cartões selecionados. Você pode editar participantes ou excluir itens.
+                Todos os lançamentos do mês nos cartões selecionados. Você pode editar participantes, localizar no Maps ou excluir itens.
               </p>
             </div>
-            <div class="text-right">
-              <span class="text-xs text-slate-500 block">Total Geral da Fatura</span>
-              <span id="admin-raw-total" class="font-display font-extrabold text-lg text-slate-900 tabular-nums">R$ 0,00</span>
+            <div class="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onclick="exportAdminGeneralExcel()"
+                class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-sm transition"
+              >
+                <i data-lucide="file-spreadsheet" class="w-4 h-4"></i>
+                <span>Exportar Excel Geral (.xlsx)</span>
+              </button>
+              <div class="text-right">
+                <span class="text-xs text-slate-500 block">Total Geral da Fatura</span>
+                <span id="admin-raw-total" class="font-display font-extrabold text-lg text-slate-900 tabular-nums">R$ 0,00</span>
+              </div>
             </div>
           </div>
 
@@ -624,7 +695,6 @@
               </div>
             </div>
 
-            <!-- Modo de Divisão (Manual) -->
             <div class="grid grid-cols-2 gap-2 mb-2.5 p-1 bg-slate-100 rounded-xl">
               <button type="button" id="exp-split-mode-equal" onclick="setModalSplitMode('EQUAL')" class="py-1.5 px-2.5 rounded-lg text-xs font-bold bg-white text-slate-900 shadow-sm transition">
                 Dividir por Igual
@@ -651,7 +721,7 @@
   </div>
 
   <!-- =========================================================
-       MODAL 2: IMPORTADOR DE FATURA (PDF / CSV / TEXTO) & ASSISTENTE
+       MODAL 2: IMPORTADOR DE FATURA (PDF / IMAGEM PRINT / CSV)
   ========================================================== -->
   <div id="import-modal" class="fixed inset-0 z-50 hidden bg-slate-900/60 backdrop-blur-sm overflow-y-auto p-3 sm:p-6">
     <div class="min-h-full flex items-center justify-center">
@@ -659,15 +729,15 @@
         <div class="px-6 py-4 bg-slate-900 text-white flex items-center justify-between shrink-0">
           <div class="flex items-center gap-2">
             <i data-lucide="sparkles" class="w-5 h-5 text-emerald-400"></i>
-            <h3 class="font-display font-bold text-base">Importar Fatura (PDF / CSV) & Divisão Guiada</h3>
+            <h3 class="font-display font-bold text-base">Importar Fatura (PDF / Print Imagem / CSV)</h3>
           </div>
           <button type="button" onclick="closeImportModal()" class="text-slate-400 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
         </div>
 
-        <!-- Passo 1: Upload PDF/CSV ou Colagem de Texto -->
+        <!-- Passo 1: Upload PDF/Imagem/CSV ou Colagem de Texto -->
         <div id="import-step-1" class="p-5 sm:p-6 space-y-4 overflow-y-auto flex-1">
           <p class="text-xs text-slate-600">
-            Anexe o <strong>PDF da fatura</strong> (ex: Nubank) ou cole os lançamentos no padrão
+            Anexe o <strong>PDF da fatura</strong>, um <strong>print/imagem do celular</strong> ou cole os lançamentos no padrão
             <code class="bg-slate-100 px-1.5 py-0.5 rounded text-slate-800 font-semibold">DD/MMM; Número do cartão; Descrição; Parcelas; Valor</code>.
           </p>
 
@@ -697,15 +767,16 @@
             onclick="document.getElementById('import-file-input').click()"
             class="border-2 border-dashed border-slate-300 hover:border-emerald-500 bg-slate-50/70 hover:bg-emerald-50/40 rounded-2xl p-5 text-center cursor-pointer transition"
           >
-            <input type="file" id="import-file-input" accept=".pdf,.csv,.txt,application/pdf" onchange="handleImportFileUpload(event)" class="hidden" />
+            <input type="file" id="import-file-input" accept=".pdf,.csv,.txt,.png,.jpg,.jpeg,.webp,application/pdf,image/*" onchange="handleImportFileUpload(event)" class="hidden" />
             <div class="w-10 h-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto mb-2">
               <i data-lucide="file-up" class="w-5 h-5"></i>
             </div>
-            <p class="text-sm font-bold text-slate-800">Clique para anexar a Fatura em PDF (ou arraste aqui)</p>
-            <p class="text-xs text-slate-500 mt-0.5">Suporta arquivos <span class="font-semibold text-slate-700">.PDF</span>, <span class="font-semibold text-slate-700">.CSV</span> e <span class="font-semibold text-slate-700">.TXT</span></p>
+            <p class="text-sm font-bold text-slate-800">Clique para anexar PDF ou Print da Fatura (ou arraste aqui)</p>
+            <p class="text-xs text-slate-500 mt-0.5">Suporta <span class="font-semibold text-slate-700">.PDF</span>, <span class="font-semibold text-slate-700">Prints (.PNG, .JPG, .WEBP)</span>, <span class="font-semibold text-slate-700">.CSV</span> e <span class="font-semibold text-slate-700">.TXT</span></p>
+            <p class="text-[11px] text-rose-600 font-medium mt-1">Arquivos anexados ficam disponíveis para download exclusivo da Emillyn no mês correspondente.</p>
             <div id="pdf-reading-status" class="hidden mt-3 inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-100 text-indigo-800 text-xs font-bold">
               <i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin"></i>
-              <span id="pdf-reading-text">Processando PDF...</span>
+              <span id="pdf-reading-text">Processando arquivo...</span>
             </div>
           </div>
 
@@ -713,7 +784,7 @@
             <div class="flex items-center justify-between mb-1">
               <label class="text-xs font-bold text-slate-700">Lançamentos Identificados (Editável antes de iniciar)</label>
               <div class="flex items-center gap-3">
-                <button type="button" id="toggle-raw-pdf-btn" onclick="toggleRawPdfPreview()" class="hidden text-xs text-slate-600 hover:underline font-semibold">Ver texto bruto do PDF</button>
+                <button type="button" id="toggle-raw-pdf-btn" onclick="toggleRawPdfPreview()" class="hidden text-xs text-slate-600 hover:underline font-semibold">Ver texto bruto lido</button>
                 <button type="button" onclick="fillSampleInvoiceText()" class="text-xs text-indigo-600 hover:underline font-semibold">Preencher exemplo</button>
               </div>
             </div>
@@ -791,7 +862,6 @@
                   <button type="button" onclick="wizardSelectPreset('ADMIN')" class="text-xs font-semibold px-2.5 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 transition">Só Alisson</button>
                 </div>
 
-                <!-- Alternador de Tipo de Divisão no Wizard -->
                 <div class="inline-flex p-1 bg-slate-100 rounded-xl">
                   <button type="button" id="wiz-split-mode-equal" onclick="setWizardSplitMode('EQUAL')" class="px-2.5 py-1 rounded-lg text-xs font-bold bg-white text-slate-900 shadow-sm transition">
                     Igual
@@ -843,7 +913,6 @@
         </div>
 
         <div class="p-5 sm:p-6 space-y-5 overflow-y-auto flex-1">
-          <!-- Adicionar Novo Participante / Agregado -->
           <form onsubmit="addNewAggregate(event)" class="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
             <div class="flex items-center justify-between">
               <label class="text-xs font-bold text-slate-800">Adicionar Novo Participante ou Agregado</label>
@@ -938,7 +1007,7 @@
   </div>
 
   <!-- =========================================================
-       MODAL 6: CONTESTAR LANÇAMENTO
+       MODAL 6: CRIAR / EDITAR CONTESTAÇÃO
   ========================================================== -->
   <div id="dispute-modal" class="fixed inset-0 z-50 hidden bg-slate-900/60 backdrop-blur-sm overflow-y-auto p-4">
     <div class="min-h-full flex items-center justify-center">
@@ -946,13 +1015,14 @@
         <div class="px-6 py-4 bg-slate-900 text-white flex items-center justify-between">
           <div class="flex items-center gap-2">
             <i data-lucide="flag" class="w-4 h-4 text-amber-400"></i>
-            <h3 class="font-display font-bold text-sm">Contestar Lançamento</h3>
+            <h3 id="dispute-modal-title" class="font-display font-bold text-sm">Contestar Lançamento</h3>
           </div>
           <button type="button" onclick="closeDisputeModal()" class="text-slate-400 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
         </div>
 
         <form onsubmit="submitDisputeForm(event)" class="p-6 space-y-4">
           <input type="hidden" id="dispute-exp-id" />
+          <input type="hidden" id="dispute-edit-id" />
           <div class="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 space-y-1">
             <span id="dispute-item-meta" class="text-[11px] font-semibold text-slate-500 block"></span>
             <p id="dispute-item-desc" class="font-display font-bold text-slate-900 text-sm"></p>
@@ -975,7 +1045,7 @@
 
           <div class="flex justify-end gap-2 pt-1">
             <button type="button" onclick="closeDisputeModal()" class="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl">Cancelar</button>
-            <button type="submit" class="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-bold rounded-xl shadow-sm flex items-center gap-1.5">
+            <button type="submit" id="dispute-submit-btn" class="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-bold rounded-xl shadow-sm flex items-center gap-1.5">
               <i data-lucide="flag" class="w-3.5 h-3.5"></i>
               <span>Enviar Contestação</span>
             </button>
@@ -1033,7 +1103,61 @@
   </div>
 
   <!-- =========================================================
-       JAVASCRIPT: FIREBASE FIRESTORE + ARQUITETURA + UI
+       MODAL 8: VISÃO DETALHADA DO PARTICIPANTE (EXCLUSIVO ADMIN)
+  ========================================================== -->
+  <div id="admin-user-detail-modal" class="fixed inset-0 z-50 hidden bg-slate-900/60 backdrop-blur-sm overflow-y-auto p-3 sm:p-6">
+    <div class="min-h-full flex items-center justify-center">
+      <div class="bg-white rounded-3xl max-w-4xl w-full border border-slate-200 shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+        <div class="px-6 py-4 bg-slate-900 text-white flex items-center justify-between shrink-0">
+          <div class="flex items-center gap-3">
+            <div id="admin-detail-avatar" class="w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs overflow-hidden"></div>
+            <div>
+              <h3 id="admin-detail-title" class="font-display font-bold text-base">Extrato Individual</h3>
+              <p id="admin-detail-subtitle" class="text-xs text-slate-300"></p>
+            </div>
+          </div>
+          <div class="flex items-center gap-2">
+            <button
+              type="button"
+              id="admin-detail-excel-btn"
+              class="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-slate-950 text-xs font-bold rounded-xl flex items-center gap-1.5 transition"
+            >
+              <i data-lucide="file-spreadsheet" class="w-3.5 h-3.5"></i>
+              <span>Baixar Excel</span>
+            </button>
+            <button type="button" onclick="closeAdminUserDetailModal()" class="text-slate-400 hover:text-white p-1">
+              <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
+          </div>
+        </div>
+
+        <div class="p-5 sm:p-6 space-y-4 overflow-y-auto flex-1">
+          <div id="admin-detail-summary-bar" class="grid grid-cols-1 sm:grid-cols-3 gap-3"></div>
+
+          <div class="overflow-x-auto border border-slate-200 rounded-2xl">
+            <table class="w-full text-left border-collapse">
+              <thead>
+                <tr class="bg-slate-100/90 border-b border-slate-200 text-[11px] font-bold uppercase tracking-wider text-slate-600">
+                  <th class="py-3 px-4">Data</th>
+                  <th class="py-3 px-4">Estabelecimento / Descrição</th>
+                  <th class="py-3 px-4">Cartão</th>
+                  <th class="py-3 px-4 text-center">Parcela</th>
+                  <th class="py-3 px-4 text-right">Valor Real</th>
+                  <th class="py-3 px-4 text-center">Divisão</th>
+                  <th class="py-3 px-4 text-right bg-emerald-50/70 text-emerald-900">Parte do Participante</th>
+                </tr>
+              </thead>
+              <tbody id="admin-detail-table-body" class="divide-y divide-slate-200/80 text-sm"></tbody>
+              <tfoot id="admin-detail-table-foot" class="bg-slate-900 text-white font-bold text-sm"></tfoot>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================================================
+       JAVASCRIPT: FIREBASE FIRESTORE + OCR + EXCEL + MAPS + UI
   ========================================================== -->
   <script>
     // Configuração do Projeto Firebase (cartao-fatura)
@@ -1093,10 +1217,13 @@
     const STORAGE_KEY_PAYMENTS = 'cartao_app_payments_v4';
     const STORAGE_KEY_PDF_TARGETS = 'cartao_app_pdf_targets_v1';
     const STORAGE_KEY_DISPUTES = 'cartao_app_disputes_v1';
+    const STORAGE_KEY_INVOICE_FILES = 'cartao_app_invoice_files_v1';
+    const STORAGE_KEY_LAST_EXP_UPDATE = 'cartao_app_last_exp_update_v1';
 
     let evolutionChartInstance = null;
     let distributionChartInstance = null;
     let revealedPinsMap = {};
+    let pendingUploadedInvoiceFile = null;
 
     let state = {
       users: [],
@@ -1104,6 +1231,8 @@
       payments: {},
       pdfTargets: {},
       disputes: [],
+      invoiceFiles: {},
+      lastExpenseUpdate: null,
       currentUser: null,
       firstAccessUser: null,
       activeTab: 'sheet',
@@ -1120,7 +1249,7 @@
     };
 
     // ---------------------------------------------------------
-    // UTILITÁRIOS DE FORMATAÇÃO, DATAS E PRAZO (DIA 07)
+    // UTILITÁRIOS DE FORMATAÇÃO, DATAS, MAPS E PRAZO (DIA 07)
     // ---------------------------------------------------------
     function refreshIcons() {
       if (window.lucide) {
@@ -1134,6 +1263,52 @@
         .replace(/[\u0300-\u036f]/g, '')
         .trim()
         .toLowerCase();
+    }
+
+    function parseFlexibleCurrency(rawVal) {
+      if (typeof rawVal === 'number') return isNaN(rawVal) ? NaN : rawVal;
+      let str = String(rawVal || '').replace(/R\$/gi, '').replace(/\s+/g, '').trim();
+      if (!str) return NaN;
+      const lastComma = str.lastIndexOf(',');
+      const lastDot = str.lastIndexOf('.');
+      if (lastComma > -1 && lastDot > -1) {
+        if (lastComma > lastDot) {
+          str = str.replace(/\./g, '').replace(',', '.');
+        } else {
+          str = str.replace(/,/g, '');
+        }
+      } else if (lastComma > -1) {
+        str = str.replace(',', '.');
+      }
+      const num = parseFloat(str);
+      return isNaN(num) ? NaN : num;
+    }
+
+    function formatTimestampBR(ts) {
+      if (!ts) return 'Ainda não houve lançamentos registrados';
+      const d = new Date(ts);
+      if (isNaN(d.getTime())) return 'Atualizado recentemente';
+      const datePart = d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+      const timePart = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+      return `${datePart} às ${timePart}`;
+    }
+
+    /**
+     * Monta URL de busca no Google Maps focada exclusivamente em Florianópolis e Grande Florianópolis (SC).
+     */
+    function buildFlorianopolisMapsUrl(rawDescription) {
+      let clean = String(rawDescription || '')
+        .replace(/\[[^\]]*\]/g, '')
+        .replace(/\([^)]*\)/g, '')
+        .replace(/^(MP|PAG|IFD|EC|UBER|99APP|PICPAY|PAYPAL|SUMUP|STONE|CIELO|REDE|GETNET|MERCADOPAGO|AMAZON|SHOPEE)\s*[\*\-\.]\s*/i, '')
+        .replace(/\b(PARC|PARCELA)\s*\d+\/\d+/gi, '')
+        .replace(/[^\w\sÀ-ÿ&'-]/g, ' ')
+        .replace(/\s{2,}/g, ' ')
+        .trim();
+
+      if (!clean) clean = String(rawDescription || '').trim();
+      const query = `${clean} Florianopolis SC`;
+      return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
     }
 
     function renderUserAvatarInner(user) {
@@ -1175,10 +1350,6 @@
       return (ty - sy) * 12 + (tm - sm);
     }
 
-    /**
-     * Calcula o status do vencimento (sempre dia 07 do mês seguinte à fatura).
-     * Ex: Fatura de 2026-11 vence em 07/12/2026.
-     */
     function getDueDateStatus(ym, isPaid, hasBalance) {
       const dueYM = addMonthsToYM(ym, 1);
       const [dueY, dueM] = dueYM.split('-').map(Number);
@@ -1355,12 +1526,20 @@
 
         const savedDisputes = JSON.parse(localStorage.getItem(STORAGE_KEY_DISPUTES) || 'null');
         state.disputes = Array.isArray(savedDisputes) ? savedDisputes : [];
+
+        const savedInvFiles = JSON.parse(localStorage.getItem(STORAGE_KEY_INVOICE_FILES) || 'null');
+        state.invoiceFiles = savedInvFiles && typeof savedInvFiles === 'object' ? savedInvFiles : {};
+
+        const savedLastExp = localStorage.getItem(STORAGE_KEY_LAST_EXP_UPDATE);
+        state.lastExpenseUpdate = savedLastExp ? Number(savedLastExp) : null;
       } catch (err) {
         state.users = DEFAULT_USERS.map(u => ({ ...u }));
         state.expenses = [];
         state.payments = {};
         state.pdfTargets = {};
         state.disputes = [];
+        state.invoiceFiles = {};
+        state.lastExpenseUpdate = null;
       }
     }
 
@@ -1371,12 +1550,19 @@
         localStorage.setItem(STORAGE_KEY_PAYMENTS, JSON.stringify(state.payments));
         localStorage.setItem(STORAGE_KEY_PDF_TARGETS, JSON.stringify(state.pdfTargets));
         localStorage.setItem(STORAGE_KEY_DISPUTES, JSON.stringify(state.disputes));
+        localStorage.setItem(STORAGE_KEY_INVOICE_FILES, JSON.stringify(state.invoiceFiles));
+        if (state.lastExpenseUpdate) {
+          localStorage.setItem(STORAGE_KEY_LAST_EXP_UPDATE, String(state.lastExpenseUpdate));
+        }
       } catch (e) {
         console.warn('Cache local cheio:', e);
       }
     }
 
-    function saveAllData() {
+    function saveAllData(expensesChanged = false) {
+      if (expensesChanged) {
+        state.lastExpenseUpdate = Date.now();
+      }
       saveLocalCacheOnly();
 
       if (stateDocRef) {
@@ -1386,6 +1572,8 @@
           payments: state.payments,
           pdfTargets: state.pdfTargets,
           disputes: state.disputes,
+          invoiceFiles: state.invoiceFiles,
+          lastExpenseUpdate: state.lastExpenseUpdate,
           updatedAt: Date.now()
         }));
 
@@ -1394,7 +1582,7 @@
           .catch(err => {
             console.error('Erro ao salvar no Firestore:', err);
             updateCloudStatusUI(false, 'Erro ao sincronizar');
-            showToast('Atenção: falha ao salvar na nuvem. Verifique as regras do Firestore.', 'error');
+            showToast('Atenção: falha ao salvar na nuvem (verifique tamanho do arquivo ou regras).', 'error');
           });
       }
     }
@@ -1416,6 +1604,8 @@
             state.payments = data.payments && typeof data.payments === 'object' ? data.payments : {};
             state.pdfTargets = data.pdfTargets && typeof data.pdfTargets === 'object' ? data.pdfTargets : {};
             state.disputes = Array.isArray(data.disputes) ? data.disputes : [];
+            state.invoiceFiles = data.invoiceFiles && typeof data.invoiceFiles === 'object' ? data.invoiceFiles : {};
+            state.lastExpenseUpdate = data.lastExpenseUpdate || data.updatedAt || state.lastExpenseUpdate;
 
             saveLocalCacheOnly();
 
@@ -1429,7 +1619,7 @@
             }
             refreshIcons();
           } else {
-            saveAllData();
+            saveAllData(false);
           }
         },
         (error) => {
@@ -1491,7 +1681,6 @@
         return;
       }
 
-      // Se for primeiro acesso (ainda sem PIN configurado), abre o cadastro do PIN
       if (!matchedUser.pinConfigured) {
         state.firstAccessUser = matchedUser;
         errEl.classList.add('hidden');
@@ -1546,7 +1735,7 @@
       if (idx !== -1) {
         state.users[idx].pin = p1;
         state.users[idx].pinConfigured = true;
-        saveAllData();
+        saveAllData(false);
         state.firstAccessUser = null;
         completeLogin(state.users[idx]);
         showToast('PIN cadastrado na nuvem! Bem-vindo(a)!', 'success');
@@ -1645,7 +1834,7 @@
           if (idx !== -1) {
             state.users[idx].avatar = compressedDataUrl;
             state.currentUser = state.users[idx];
-            saveAllData();
+            saveAllData(false);
             updateHeaderUserUI();
             openProfilePhotoModal();
             renderCurrentView();
@@ -1663,7 +1852,7 @@
       if (idx !== -1) {
         delete state.users[idx].avatar;
         state.currentUser = state.users[idx];
-        saveAllData();
+        saveAllData(false);
         updateHeaderUserUI();
         openProfilePhotoModal();
         renderCurrentView();
@@ -1704,7 +1893,7 @@
         state.users[idx].pin = p1;
         state.users[idx].pinConfigured = true;
         state.currentUser = state.users[idx];
-        saveAllData();
+        saveAllData(false);
         closeChangeMyPinModal();
         showToast('Seu PIN foi alterado com sucesso!', 'success');
       }
@@ -1727,14 +1916,19 @@
     function renderMainTabs() {
       const nav = document.getElementById('main-tabs');
       const isAdmin = state.currentUser && state.currentUser.role === 'ADMIN';
-      const openDisputesCount = state.disputes.filter(d => d.status === 'OPEN').length;
+      const userId = state.currentUser ? state.currentUser.id : '';
+
+      const relevantDisputesCount = isAdmin
+        ? state.disputes.filter(d => d.status === 'OPEN').length
+        : state.disputes.filter(d => d.userId === userId && d.status !== 'DELETED').length;
+
       const tabs = [
         { id: 'sheet', label: 'Minha Planilha', icon: 'table' },
         { id: 'transparency', label: 'Como foi dividido', icon: 'eye' },
-        { id: 'charts', label: 'Gráficos & Evolução', icon: 'bar-chart-3' }
+        { id: 'charts', label: 'Gráficos & Evolução', icon: 'bar-chart-3' },
+        { id: 'disputes', label: isAdmin ? 'Contestações' : 'Minhas Contestações', icon: 'flag', badge: relevantDisputesCount }
       ];
       if (isAdmin) {
-        tabs.push({ id: 'disputes', label: 'Contestações', icon: 'flag', badge: openDisputesCount });
         tabs.push({ id: 'admin', label: 'Painel Admin & Fatura', icon: 'shield' });
       }
 
@@ -1810,7 +2004,7 @@
     function renderCurrentView() {
       if (!state.currentUser) return;
       const isAdmin = state.currentUser.role === 'ADMIN';
-      if (!isAdmin && (state.activeTab === 'disputes' || state.activeTab === 'admin')) {
+      if (!isAdmin && state.activeTab === 'admin') {
         state.activeTab = 'sheet';
       }
 
@@ -1824,7 +2018,7 @@
 
       if (state.activeTab === 'sheet') renderParticipantSheetTab();
       else if (state.activeTab === 'transparency') renderTransparencyTab();
-      else if (state.activeTab === 'disputes' && isAdmin) renderDisputesTab();
+      else if (state.activeTab === 'disputes') renderDisputesTab();
       else if (state.activeTab === 'charts') renderChartsTab();
       else if (state.activeTab === 'admin' && isAdmin) renderAdminTab();
 
@@ -1832,13 +2026,192 @@
     }
 
     // ---------------------------------------------------------
-    // ABA 1: MINHA PLANILHA (COM CONTAGEM DE DIAS E VENCIMENTO DIA 07)
+    // EXPORTAÇÃO EM EXCEL (.XLSX) — INDIVIDUAL E GERAL
+    // ---------------------------------------------------------
+    function exportUserExcel(userId) {
+      if (!window.XLSX) {
+        showToast('Biblioteca Excel carregando. Tente novamente em alguns segundos.', 'error');
+        return;
+      }
+      const user = state.users.find(u => u.id === userId);
+      if (!user) return;
+
+      const ym = state.selectedMonth;
+      const allMonthItems = getItemsForMonth(ym, state.selectedCard);
+      const userItems = allMonthItems.filter(it => it.participants && it.participants.includes(user.id));
+
+      if (userItems.length === 0) {
+        showToast(`Não há lançamentos para ${user.name} neste mês.`, 'error');
+        return;
+      }
+
+      const rows = userItems.map(it => {
+        const share = Number(getUserShareForExpense(it, user.id).toFixed(2));
+        const isCustom = it.splitType === 'CUSTOM';
+        return {
+          'Data': formatDateBR(it.date),
+          'Estabelecimento / Descrição': it.description,
+          'Cartão': it.card,
+          'Parcela': it.totalInstallments > 1 ? `${it.currentInstallment}/${it.totalInstallments}` : '1x',
+          'Valor Real no Mês (R$)': Number(it.monthlyTotal.toFixed(2)),
+          'Regra de Divisão': isCustom ? 'Valor Acordado' : `1/${it.participants.length} igual`,
+          'Sua Parte (R$)': share
+        };
+      });
+
+      const totalUser = Number(userItems.reduce((s, it) => s + getUserShareForExpense(it, user.id), 0).toFixed(2));
+      rows.push({
+        'Data': '',
+        'Estabelecimento / Descrição': `TOTAL A PAGAR (${user.name.toUpperCase()})`,
+        'Cartão': '',
+        'Parcela': '',
+        'Valor Real no Mês (R$)': '',
+        'Regra de Divisão': '',
+        'Sua Parte (R$)': totalUser
+      });
+
+      const ws = XLSX.utils.json_to_sheet(rows);
+      ws['!cols'] = [
+        { wch: 10 },
+        { wch: 38 },
+        { wch: 14 },
+        { wch: 10 },
+        { wch: 22 },
+        { wch: 18 },
+        { wch: 18 }
+      ];
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Planilha de Gastos');
+
+      const safeName = normalizeText(user.name).replace(/[^a-z0-9]/g, '_');
+      XLSX.writeFile(wb, `fatura_${safeName}_${ym}.xlsx`);
+      showToast(`Planilha Excel de ${user.name} baixada!`, 'success');
+    }
+
+    function exportAdminGeneralExcel() {
+      if (!window.XLSX) {
+        showToast('Biblioteca Excel carregando. Tente novamente em alguns segundos.', 'error');
+        return;
+      }
+      const ym = state.selectedMonth;
+      const monthItems = getItemsForMonth(ym, state.selectedCard);
+      if (monthItems.length === 0) {
+        showToast('Não há lançamentos para exportar neste mês.', 'error');
+        return;
+      }
+
+      // Aba 1: Fatura Bruta Completa
+      const rawRows = monthItems.map(it => {
+        const namesList = (it.participants || []).map(pid => {
+          const u = state.users.find(x => x.id === pid);
+          const share = getUserShareForExpense(it, pid);
+          return `${u ? u.name : pid} (${formatBRL(share)})`;
+        }).join(', ');
+
+        return {
+          'Data': formatDateBR(it.date),
+          'Estabelecimento': it.description,
+          'Cartão': it.card,
+          'Parcela': it.totalInstallments > 1 ? `${it.currentInstallment}/${it.totalInstallments}` : '1x',
+          'Valor no Mês (R$)': Number(it.monthlyTotal.toFixed(2)),
+          'Dividido Entre': namesList
+        };
+      });
+
+      // Aba 2: Resumo por Participante
+      const summaryRows = state.users.map(u => {
+        const uTotal = Number(monthItems.reduce((s, it) => s + getUserShareForExpense(it, u.id), 0).toFixed(2));
+        const isPaid = !!state.payments[`${ym}_${u.id}`];
+        return {
+          'Participante': u.name,
+          'Tipo': u.role === 'ADMIN' ? 'Administrador' : (u.isCore ? 'Fixo' : 'Agregado'),
+          'Total a Pagar (R$)': uTotal,
+          'Status': uTotal === 0 ? 'Sem saldo' : (isPaid ? 'Pago' : 'Pendente')
+        };
+      });
+
+      const wb = XLSX.utils.book_new();
+      const wsRaw = XLSX.utils.json_to_sheet(rawRows);
+      wsRaw['!cols'] = [{ wch: 10 }, { wch: 36 }, { wch: 14 }, { wch: 10 }, { wch: 18 }, { wch: 45 }];
+
+      const wsSummary = XLSX.utils.json_to_sheet(summaryRows);
+      wsSummary['!cols'] = [{ wch: 24 }, { wch: 16 }, { wch: 20 }, { wch: 14 }];
+
+      XLSX.utils.book_append_sheet(wb, wsRaw, 'Fatura Bruta');
+      XLSX.utils.book_append_sheet(wb, wsSummary, 'Resumo por Pessoa');
+
+      XLSX.writeFile(wb, `fatura_geral_${ym}.xlsx`);
+      showToast('Excel Geral (Fatura + Resumo) baixado!', 'success');
+    }
+
+    // ---------------------------------------------------------
+    // DOWNLOAD EXCLUSIVO DA FATURA ORIGINAL (EMILLYN)
+    // ---------------------------------------------------------
+    function renderEmillynInvoiceCard(ym) {
+      const box = document.getElementById('emillyn-invoice-box');
+      if (!box || !state.currentUser) return;
+
+      const isEmillyn = state.currentUser.id === 'emillyn' || normalizeText(state.currentUser.name) === 'emillyn';
+      if (!isEmillyn) {
+        box.classList.add('hidden');
+        return;
+      }
+
+      box.classList.remove('hidden');
+      document.getElementById('emillyn-invoice-month-label').textContent = formatMonthLabel(ym);
+
+      const fileRecord = state.invoiceFiles && state.invoiceFiles[ym];
+      const statusText = document.getElementById('emillyn-invoice-status-text');
+      const actionBox = document.getElementById('emillyn-invoice-action');
+
+      if (fileRecord && fileRecord.dataUrl) {
+        statusText.innerHTML = `Arquivo disponível: <strong>${fileRecord.fileName}</strong> • Postado em ${formatTimestampBR(fileRecord.uploadedAt)}.`;
+        actionBox.innerHTML = `
+          <button
+            type="button"
+            onclick="downloadOriginalInvoiceForEmillyn('${ym}')"
+            class="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl flex items-center gap-2 shadow-sm transition"
+          >
+            <i data-lucide="download" class="w-4 h-4"></i>
+            <span>Baixar Fatura Original</span>
+          </button>
+        `;
+      } else {
+        statusText.innerHTML = `<span class="text-amber-800 font-semibold">A fatura de ${formatMonthLabel(ym)} ainda não foi postada pelo administrador ou ainda não foi fechada.</span>`;
+        actionBox.innerHTML = `
+          <span class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-100 text-amber-900 text-xs font-bold border border-amber-200">
+            <i data-lucide="clock" class="w-3.5 h-3.5"></i>
+            <span>Aguardando fechamento</span>
+          </span>
+        `;
+      }
+    }
+
+    function downloadOriginalInvoiceForEmillyn(ym) {
+      const fileRecord = state.invoiceFiles && state.invoiceFiles[ym];
+      if (!fileRecord || !fileRecord.dataUrl) {
+        showToast('A fatura deste mês ainda não foi postada.', 'error');
+        return;
+      }
+      const link = document.createElement('a');
+      link.href = fileRecord.dataUrl;
+      link.download = fileRecord.fileName || `fatura_${ym}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      showToast('Download da fatura iniciado!', 'success');
+    }
+
+    // ---------------------------------------------------------
+    // ABA 1: MINHA PLANILHA
     // ---------------------------------------------------------
     function renderParticipantSheetTab() {
       const user = state.currentUser;
       const isAdmin = user.role === 'ADMIN';
       const ym = state.selectedMonth;
       const search = (document.getElementById('sheet-search')?.value || '').toLowerCase().trim();
+
+      renderEmillynInvoiceCard(ym);
 
       const kpiGrid = document.getElementById('participant-kpis-grid');
       const adminPixCard = document.getElementById('admin-pix-card');
@@ -1937,10 +2310,17 @@
       document.getElementById('kpi-my-count').textContent = `${myItems.length} ${myItems.length === 1 ? 'item' : 'itens'}`;
       document.getElementById('kpi-my-installments').textContent = `${parceladosCount} parcelado(s) neste mês`;
 
-      // Banner de status (com alerta vermelho se vencido)
+      // Banner de status + Última atualização dos gastos no site
       const banner = document.getElementById('month-status-banner');
+      const lastUpdateHtml = `
+        <div class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/90 border border-slate-200/80 text-[11px] font-semibold text-slate-700 shrink-0 shadow-2xs">
+          <i data-lucide="refresh-cw" class="w-3.5 h-3.5 text-emerald-600"></i>
+          <span>Último lançamento no site: <strong>${formatTimestampBR(state.lastExpenseUpdate)}</strong></span>
+        </div>
+      `;
+
       if (myItems.length === 0) {
-        banner.className = 'rounded-2xl p-4 border border-slate-200 bg-white flex flex-col sm:flex-row sm:items-center justify-between gap-3';
+        banner.className = 'rounded-2xl p-4 border border-slate-200 bg-white flex flex-col lg:flex-row lg:items-center justify-between gap-3';
         banner.innerHTML = `
           <div class="flex items-center gap-3">
             <div class="w-9 h-9 rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center shrink-0"><i data-lucide="calendar" class="w-4 h-4"></i></div>
@@ -1949,9 +2329,10 @@
               <p class="text-xs text-slate-500">Assim que o Alisson anexar a fatura e dividir os itens, sua planilha aparecerá aqui automaticamente.</p>
             </div>
           </div>
+          ${lastUpdateHtml}
         `;
       } else if (dueInfo.state === 'OVERDUE') {
-        banner.className = 'rounded-2xl p-4 border-2 border-rose-400 bg-rose-50 flex flex-col sm:flex-row sm:items-center justify-between gap-3';
+        banner.className = 'rounded-2xl p-4 border-2 border-rose-400 bg-rose-50 flex flex-col lg:flex-row lg:items-center justify-between gap-3';
         banner.innerHTML = `
           <div class="flex items-center gap-3">
             <div class="w-10 h-10 rounded-xl bg-rose-600 text-white flex items-center justify-center shrink-0 shadow-sm"><i data-lucide="alert-triangle" class="w-5 h-5"></i></div>
@@ -1960,9 +2341,10 @@
               <p class="text-xs text-rose-800">O prazo do dia <strong>${dueInfo.dueDateStr}</strong> já passou (atraso de <strong>${dueInfo.overdueDays} ${dueInfo.overdueDays === 1 ? 'dia' : 'dias'}</strong>). Regularize o valor de <strong>${formatBRL(myTotal)}</strong> com o Alisson.</p>
             </div>
           </div>
+          ${lastUpdateHtml}
         `;
       } else {
-        banner.className = `rounded-2xl p-4 border ${user.border} ${user.bg} flex flex-col sm:flex-row sm:items-center justify-between gap-3`;
+        banner.className = `rounded-2xl p-4 border ${user.border} ${user.bg} flex flex-col lg:flex-row lg:items-center justify-between gap-3`;
         banner.innerHTML = `
           <div class="flex items-center gap-3">
             <div class="w-9 h-9 rounded-xl bg-white/80 ${user.text} flex items-center justify-center font-bold text-xs shrink-0 overflow-hidden">${renderUserAvatarInner(user)}</div>
@@ -1971,6 +2353,7 @@
               <p class="text-xs text-slate-700">Você participa de <strong>${myItems.length}</strong> compra(s) neste mês • Vencimento em <strong>${dueInfo.dueDateStr}</strong>.</p>
             </div>
           </div>
+          ${lastUpdateHtml}
         `;
       }
 
@@ -1995,6 +2378,7 @@
         const isCustom = it.splitType === 'CUSTOM';
         const pctShare = it.monthlyTotal !== 0 ? Math.round((myShare / it.monthlyTotal) * 100) : 0;
         const openDispute = state.disputes.find(d => d.expenseId === it.id && d.userId === user.id && d.status === 'OPEN');
+        const mapsUrl = buildFlorianopolisMapsUrl(it.description);
 
         return `
           <tr class="${openDispute ? 'bg-amber-50/60' : (isRefund ? 'bg-cyan-50/50 hover:bg-cyan-50' : 'hover:bg-slate-50/90')} transition">
@@ -2002,6 +2386,16 @@
             <td class="py-3 px-4 font-semibold ${isRefund ? 'text-cyan-950' : 'text-slate-900'}">
               <div class="flex items-center gap-2 flex-wrap">
                 <span>${it.description}</span>
+                <a
+                  href="${mapsUrl}"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="Ver estabelecimento na Grande Florianópolis (Google Maps)"
+                  class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 text-[10px] font-bold transition"
+                >
+                  <i data-lucide="map-pin" class="w-3 h-3"></i>
+                  <span>Maps</span>
+                </a>
                 ${isRefund ? '<span class="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full bg-cyan-100 text-cyan-800 border border-cyan-300">Reembolso / Desconto</span>' : ''}
                 ${openDispute ? '<span class="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300">Contestado</span>' : ''}
               </div>
@@ -2023,7 +2417,10 @@
             <td class="py-3 px-4 text-center whitespace-nowrap">
               ${user.role !== 'ADMIN' ? (
                 openDispute
-                  ? `<span class="text-[11px] font-bold text-amber-700">Em análise</span>`
+                  ? `<div class="inline-flex items-center gap-1">
+                      <button type="button" onclick="openEditDisputeModal('${openDispute.id}')" class="px-2 py-1 rounded-lg text-[11px] font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 transition" title="Editar contestação">Editar</button>
+                      <button type="button" onclick="deleteDispute('${openDispute.id}')" class="px-2 py-1 rounded-lg text-[11px] font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition" title="Excluir contestação">Excluir</button>
+                    </div>`
                   : `<button type="button" onclick="openDisputeModal('${it.id}')" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-200 transition" title="Contestar este valor">
                       <i data-lucide="flag" class="w-3 h-3"></i>
                       <span>Contestar</span>
@@ -2065,6 +2462,7 @@
         const myShare = getUserShareForExpense(it, user.id);
         const isRefund = it.monthlyTotal < 0 || myShare < 0;
         const isCustom = it.splitType === 'CUSTOM';
+        const mapsUrl = buildFlorianopolisMapsUrl(it.description);
         const badges = it.participants.map(pid => {
           const pUser = state.users.find(u => u.id === pid);
           const pName = pUser ? pUser.name : pid;
@@ -2084,9 +2482,15 @@
             <div class="flex items-start justify-between gap-3">
               <div>
                 <span class="text-[11px] font-semibold ${isRefund ? 'text-cyan-700' : 'text-slate-500'}">${formatDateBR(it.date)} • ${it.card} • ${it.totalInstallments > 1 ? `Parcela ${it.currentInstallment}/${it.totalInstallments}` : 'À vista'}</span>
-                <h4 class="font-display font-bold ${isRefund ? 'text-cyan-950' : 'text-slate-900'} text-base mt-0.5">${it.description}</h4>
+                <div class="flex items-center gap-2 flex-wrap mt-0.5">
+                  <h4 class="font-display font-bold ${isRefund ? 'text-cyan-950' : 'text-slate-900'} text-base">${it.description}</h4>
+                  <a href="${mapsUrl}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 text-[10px] font-bold">
+                    <i data-lucide="map-pin" class="w-3 h-3"></i>
+                    <span>Maps</span>
+                  </a>
+                </div>
               </div>
-              <span class="text-[11px] font-bold px-2.5 py-1 rounded-full ${isRefund ? 'bg-cyan-100 text-cyan-800 border border-cyan-300' : (isCustom ? 'bg-purple-100 text-purple-800' : 'bg-emerald-100 text-emerald-800')}">
+              <span class="text-[11px] font-bold px-2.5 py-1 rounded-full shrink-0 ${isRefund ? 'bg-cyan-100 text-cyan-800 border border-cyan-300' : (isCustom ? 'bg-purple-100 text-purple-800' : 'bg-emerald-100 text-emerald-800')}">
                 ${isRefund ? 'Reembolso / Desconto' : (isCustom ? 'Valor Acordado' : `Dividido por ${it.participants.length}`)}
               </span>
             </div>
@@ -2112,7 +2516,7 @@
     }
 
     // ---------------------------------------------------------
-    // ABA 2B: CONTESTAÇÕES
+    // ABA 2B: CONTESTAÇÕES (CRIAR, EDITAR, EXCLUIR E HISTÓRICO)
     // ---------------------------------------------------------
     function openDisputeModal(expenseId) {
       if (!state.currentUser) return;
@@ -2121,11 +2525,31 @@
       if (!item) return;
 
       const myShare = getUserShareForExpense(item, state.currentUser.id);
+      document.getElementById('dispute-modal-title').textContent = 'Contestar Lançamento';
+      document.getElementById('dispute-submit-btn').innerHTML = '<i data-lucide="flag" class="w-3.5 h-3.5"></i><span>Enviar Contestação</span>';
       document.getElementById('dispute-exp-id').value = item.id;
+      document.getElementById('dispute-edit-id').value = '';
       document.getElementById('dispute-item-meta').textContent = `${formatDateBR(item.date)} • ${item.card}`;
       document.getElementById('dispute-item-desc').textContent = item.description;
       document.getElementById('dispute-item-share').textContent = formatBRL(myShare);
       document.getElementById('dispute-reason').value = '';
+      document.getElementById('dispute-modal').classList.remove('hidden');
+      refreshIcons();
+    }
+
+    function openEditDisputeModal(disputeId) {
+      if (!state.currentUser) return;
+      const dispute = state.disputes.find(d => d.id === disputeId);
+      if (!dispute) return;
+
+      document.getElementById('dispute-modal-title').textContent = 'Editar Minha Contestação';
+      document.getElementById('dispute-submit-btn').innerHTML = '<i data-lucide="check" class="w-3.5 h-3.5"></i><span>Salvar Alteração</span>';
+      document.getElementById('dispute-exp-id').value = dispute.expenseId;
+      document.getElementById('dispute-edit-id').value = dispute.id;
+      document.getElementById('dispute-item-meta').textContent = `${formatDateBR(dispute.date)} • ${dispute.card}`;
+      document.getElementById('dispute-item-desc').textContent = dispute.description;
+      document.getElementById('dispute-item-share').textContent = formatBRL(dispute.disputedAmount);
+      document.getElementById('dispute-reason').value = dispute.reason;
       document.getElementById('dispute-modal').classList.remove('hidden');
       refreshIcons();
     }
@@ -2138,8 +2562,32 @@
       e.preventDefault();
       if (!state.currentUser) return;
       const expenseId = document.getElementById('dispute-exp-id').value;
+      const editId = document.getElementById('dispute-edit-id').value;
       const reason = document.getElementById('dispute-reason').value.trim();
       if (!reason) return;
+
+      const nowFormatted = formatTimestampBR(Date.now());
+
+      if (editId) {
+        const idx = state.disputes.findIndex(d => d.id === editId);
+        if (idx !== -1) {
+          const oldReason = state.disputes[idx].reason;
+          if (!state.disputes[idx].history) state.disputes[idx].history = [];
+          state.disputes[idx].history.push({
+            action: 'Editada pelo usuário',
+            oldReason,
+            newReason: reason,
+            at: nowFormatted
+          });
+          state.disputes[idx].reason = reason;
+          state.disputes[idx].editedAt = nowFormatted;
+          saveAllData(false);
+          closeDisputeModal();
+          renderCurrentView();
+          showToast('Contestação atualizada! O histórico foi registrado.', 'success');
+        }
+        return;
+      }
 
       const monthItems = getItemsForMonth(state.selectedMonth, 'ALL');
       const item = monthItems.find(x => x.id === expenseId) || state.expenses.find(x => x.id === expenseId);
@@ -2160,31 +2608,75 @@
         userName: state.currentUser.name,
         reason,
         status: 'OPEN',
-        createdAt: new Date().toLocaleDateString('pt-BR')
+        createdAt: nowFormatted,
+        history: [
+          { action: 'Contestação aberta', newReason: reason, at: nowFormatted }
+        ]
       });
 
-      saveAllData();
+      saveAllData(false);
       closeDisputeModal();
       renderCurrentView();
       showToast('Contestação enviada! O Alisson poderá revisar na aba Contestações.', 'success');
     }
 
+    function deleteDispute(disputeId) {
+      const idx = state.disputes.findIndex(d => d.id === disputeId);
+      if (idx === -1) return;
+
+      const nowFormatted = formatTimestampBR(Date.now());
+      if (!state.disputes[idx].history) state.disputes[idx].history = [];
+      state.disputes[idx].history.push({
+        action: `Excluída por ${state.currentUser ? state.currentUser.name : 'Usuário'}`,
+        at: nowFormatted
+      });
+
+      // Mantém no histórico para o administrador auditar, mas oculta da lista ativa do participante
+      state.disputes[idx].status = 'DELETED';
+      state.disputes[idx].deletedAt = nowFormatted;
+
+      saveAllData(false);
+      renderCurrentView();
+      showToast('Contestação excluída! (Histórico mantido para auditoria do Admin).', 'success');
+    }
+
     function resolveDispute(disputeId) {
       const idx = state.disputes.findIndex(d => d.id === disputeId);
       if (idx === -1) return;
+      const nowFormatted = formatTimestampBR(Date.now());
+      if (!state.disputes[idx].history) state.disputes[idx].history = [];
+      state.disputes[idx].history.push({
+        action: 'Resolvida pelo Administrador',
+        at: nowFormatted
+      });
       state.disputes[idx].status = 'RESOLVED';
-      saveAllData();
+      state.disputes[idx].resolvedAt = nowFormatted;
+
+      saveAllData(false);
       renderCurrentView();
       showToast('Contestação marcada como resolvida!', 'success');
     }
 
     function renderDisputesTab() {
       const container = document.getElementById('disputes-list-container');
-      if (!container) return;
+      if (!container || !state.currentUser) return;
 
-      const isAdmin = state.currentUser && state.currentUser.role === 'ADMIN';
+      const isAdmin = state.currentUser.role === 'ADMIN';
+      const titleEl = document.getElementById('disputes-tab-title');
+      const subEl = document.getElementById('disputes-tab-subtitle');
 
-      if (!state.disputes || state.disputes.length === 0) {
+      if (titleEl && subEl) {
+        titleEl.textContent = isAdmin ? 'Contestações & Histórico Completo' : 'Minhas Contestações';
+        subEl.textContent = isAdmin
+          ? 'Visualize todas as contestações abertas, resolvidas, editadas ou excluídas pelos participantes.'
+          : 'Acompanhe suas contestações. Enquanto estiverem em análise, você pode editar o motivo ou excluí-las.';
+      }
+
+      const visibleDisputes = isAdmin
+        ? state.disputes
+        : state.disputes.filter(d => d.userId === state.currentUser.id && d.status !== 'DELETED');
+
+      if (!visibleDisputes || visibleDisputes.length === 0) {
         container.innerHTML = `
           <div class="py-14 px-4 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200">
             <div class="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto mb-3">
@@ -2192,7 +2684,7 @@
             </div>
             <h3 class="font-display font-bold text-slate-900 text-base">Nenhuma contestação registrada</h3>
             <p class="text-xs sm:text-sm text-slate-500 mt-1 max-w-md mx-auto">
-              Até o momento não há nenhuma contestação. Caso algum participante discorde de algum valor lançado, ele aparecerá aqui.
+              Caso discorde de algum valor na sua planilha, clique em "Contestar" na linha do gasto.
             </p>
           </div>
         `;
@@ -2201,26 +2693,50 @@
 
       container.innerHTML = `
         <div class="space-y-3">
-          ${state.disputes.map(d => {
+          ${visibleDisputes.map(d => {
             const pUser = state.users.find(u => u.id === d.userId);
             const isOpen = d.status === 'OPEN';
+            const isDeleted = d.status === 'DELETED';
+            const canUserEdit = !isAdmin && d.userId === state.currentUser.id && isOpen;
+
+            let statusBadge = '';
+            if (isOpen) {
+              statusBadge = '<span class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300">Aguardando Revisão</span>';
+            } else if (isDeleted) {
+              statusBadge = '<span class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-300">Excluída pelo Participante</span>';
+            } else {
+              statusBadge = '<span class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">Resolvido ✓</span>';
+            }
+
+            const historyHtml = (isAdmin && d.history && d.history.length > 0) ? `
+              <div class="mt-2 pt-2 border-t border-slate-200/80 space-y-1">
+                <span class="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">Histórico de movimentações:</span>
+                ${d.history.map(h => `
+                  <div class="text-[11px] text-slate-600 flex items-start gap-1.5">
+                    <span class="text-slate-400">•</span>
+                    <span><strong>${h.action}</strong> (${h.at})${h.oldReason ? ` — Antes: <em>"${h.oldReason}"</em>` : ''}</span>
+                  </div>
+                `).join('')}
+              </div>
+            ` : '';
+
             return `
-              <div class="p-4 sm:p-5 rounded-2xl border ${isOpen ? 'border-amber-300 bg-amber-50/40' : 'border-slate-200 bg-slate-50/60 opacity-80'} flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+              <div class="p-4 sm:p-5 rounded-2xl border ${isOpen ? 'border-amber-300 bg-amber-50/40' : (isDeleted ? 'border-rose-200 bg-rose-50/30 opacity-85' : 'border-slate-200 bg-slate-50/60 opacity-85')} flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                 <div class="space-y-1.5 flex-1">
                   <div class="flex flex-wrap items-center gap-2">
                     <span class="inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-0.5 rounded-full ${pUser ? `${pUser.bg} ${pUser.text}` : 'bg-slate-200 text-slate-800'}">
                       Contestado por: ${d.userName}
                     </span>
-                    <span class="text-[11px] font-bold px-2 py-0.5 rounded-full ${isOpen ? 'bg-amber-100 text-amber-800 border border-amber-300' : 'bg-emerald-100 text-emerald-800'}">
-                      ${isOpen ? 'Aguardando Revisão' : 'Resolvido ✓'}
-                    </span>
+                    ${statusBadge}
                     <span class="text-[11px] text-slate-400">• ${formatDateBR(d.date)} • ${d.card}</span>
                   </div>
 
                   <h4 class="font-display font-bold text-slate-900 text-base">${d.description}</h4>
                   <p class="text-xs text-slate-700 bg-white p-2.5 rounded-xl border border-slate-200/80">
                     <strong>Motivo:</strong> "${d.reason}"
+                    ${d.editedAt ? `<span class="text-[10px] text-indigo-600 font-semibold ml-1">(editado em ${d.editedAt})</span>` : ''}
                   </p>
+                  ${historyHtml}
                 </div>
 
                 <div class="flex flex-col sm:flex-row lg:flex-col items-start sm:items-center lg:items-end justify-between gap-3 shrink-0 border-t lg:border-t-0 pt-3 lg:pt-0 border-slate-200/80">
@@ -2245,6 +2761,25 @@
                         class="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition"
                       >
                         Marcar Resolvido
+                      </button>
+                    </div>
+                  ` : ''}
+
+                  ${canUserEdit ? `
+                    <div class="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onclick="openEditDisputeModal('${d.id}')"
+                        class="px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-bold transition"
+                      >
+                        Editar Contestação
+                      </button>
+                      <button
+                        type="button"
+                        onclick="deleteDispute('${d.id}')"
+                        class="px-3 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold transition"
+                      >
+                        Excluir
                       </button>
                     </div>
                   ` : ''}
@@ -2309,7 +2844,6 @@
         });
       }
 
-      // Gráfico Secundário: Cartão 1 vs Cartão 2
       const c1Items = getItemsForMonth(state.selectedMonth, 'Cartão 1').filter(it => it.participants && it.participants.includes(user.id));
       const c2Items = getItemsForMonth(state.selectedMonth, 'Cartão 2').filter(it => it.participants && it.participants.includes(user.id));
       const c1Total = Number(c1Items.reduce((s, it) => s + getUserShareForExpense(it, user.id), 0).toFixed(2));
@@ -2366,8 +2900,13 @@
       const sampleDue = getDueDateStatus(ym, false, true);
       const dueInfoEl = document.getElementById('admin-due-date-info');
       if (dueInfoEl) {
-        dueInfoEl.textContent = `Vencimento desta fatura: ${sampleDue.dueDateStr}`;
+        dueInfoEl.textContent = `Vencimento: ${sampleDue.dueDateStr} • Clique em um card para ver a planilha detalhada`;
       }
+
+      // Totais separados por Cartão 1 e Cartão 2 (independente do filtro visual para conferência)
+      const allCardsMonthItems = getItemsForMonth(ym, 'ALL');
+      const card1Total = allCardsMonthItems.filter(it => it.card === 'Cartão 1').reduce((s, it) => s + it.monthlyTotal, 0);
+      const card2Total = allCardsMonthItems.filter(it => it.card === 'Cartão 2').reduce((s, it) => s + it.monthlyTotal, 0);
 
       const monthItems = getItemsForMonth(ym, state.selectedCard);
       const purchasesTotal = monthItems.filter(it => it.monthlyTotal > 0).reduce((s, it) => s + it.monthlyTotal, 0);
@@ -2375,21 +2914,27 @@
       const rawTotal = purchasesTotal + refundsTotal;
 
       document.getElementById('admin-raw-total').textContent = formatBRL(rawTotal);
+      const elCard1 = document.getElementById('admin-check-card1');
+      const elCard2 = document.getElementById('admin-check-card2');
       const elPurch = document.getElementById('admin-check-purchases');
       const elRef = document.getElementById('admin-check-refunds');
       const elNet = document.getElementById('admin-check-net');
+      if (elCard1) elCard1.textContent = formatBRL(card1Total);
+      if (elCard2) elCard2.textContent = formatBRL(card2Total);
       if (elPurch) elPurch.textContent = formatBRL(purchasesTotal);
       if (elRef) elRef.textContent = formatBRL(refundsTotal);
       if (elNet) elNet.textContent = formatBRL(rawTotal);
 
       const targetInput = document.getElementById('admin-pdf-target-input');
       const savedTarget = state.pdfTargets[ym];
-      if (targetInput) {
-        targetInput.value = savedTarget !== undefined && savedTarget !== null && savedTarget !== '' ? savedTarget : '';
+      if (targetInput && document.activeElement !== targetInput) {
+        targetInput.value = savedTarget !== undefined && savedTarget !== null && savedTarget !== ''
+          ? Number(savedTarget).toFixed(2).replace('.', ',')
+          : '';
       }
       updateAdminPdfDiffBadge(rawTotal, savedTarget);
 
-      // Grid de Acerto por Participante (com sinalização de Vencido)
+      // Grid de Acerto por Participante (com "Marcar Pago" também para o Admin e clique para abrir planilha detalhada)
       const settlementGrid = document.getElementById('admin-settlement-grid');
       settlementGrid.innerHTML = state.users.map(u => {
         const userTotal = monthItems.reduce((s, it) => s + getUserShareForExpense(it, u.id), 0);
@@ -2397,22 +2942,26 @@
         const isPaid = !!state.payments[payKey];
         const isAdmin = u.role === 'ADMIN';
         const dueStatus = getDueDateStatus(ym, isPaid, userTotal > 0);
-        const isOverdue = !isAdmin && dueStatus.state === 'OVERDUE';
+        const isOverdue = dueStatus.state === 'OVERDUE';
 
         return `
-          <div class="bg-white rounded-2xl border ${isOverdue ? 'border-rose-400 ring-2 ring-rose-500/20' : u.border} p-4 shadow-sm flex flex-col justify-between gap-3">
+          <div
+            onclick="openAdminUserDetailModal('${u.id}')"
+            title="Clique para abrir a planilha detalhada de ${u.name}"
+            class="cursor-pointer bg-white rounded-2xl border ${isOverdue ? 'border-rose-400 ring-2 ring-rose-500/20' : u.border} p-4 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition flex flex-col justify-between gap-3"
+          >
             <div class="flex items-center justify-between gap-2">
               <div class="flex items-center gap-2.5 min-w-0">
                 <span class="w-9 h-9 rounded-full ${u.bg} ${u.text} flex items-center justify-center font-bold text-xs overflow-hidden shrink-0">${renderUserAvatarInner(u)}</span>
                 <div class="min-w-0">
                   <h4 class="font-display font-bold text-slate-900 text-sm truncate">${u.name}</h4>
-                  <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full ${u.bg} ${u.text}">${isAdmin ? 'Admin' : (u.isCore ? 'Fixo' : 'Agregado')}</span>
+                  <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full ${u.bg} ${u.text}">${isAdmin ? 'Admin (Titular)' : (u.isCore ? 'Fixo' : 'Agregado')}</span>
                 </div>
               </div>
-              ${!isAdmin && userTotal > 0 ? `
+              ${userTotal > 0 ? `
                 <button
                   type="button"
-                  onclick="toggleUserPaymentStatus('${u.id}')"
+                  onclick="event.stopPropagation(); toggleUserPaymentStatus('${u.id}')"
                   class="text-[11px] font-bold px-2.5 py-1 rounded-full border transition shrink-0 ${
                     isPaid
                       ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
@@ -2429,7 +2978,7 @@
             <div>
               <div class="flex items-center justify-between">
                 <span class="text-[11px] text-slate-500">Total no mês</span>
-                ${!isAdmin && userTotal > 0 ? `
+                ${userTotal > 0 ? `
                   <span class="text-[10px] font-bold px-1.5 py-0.5 rounded ${
                     isPaid
                       ? 'bg-emerald-50 text-emerald-700'
@@ -2439,19 +2988,25 @@
                   </span>
                 ` : ''}
               </div>
-              <span class="font-display text-xl font-extrabold text-slate-900 tabular-nums">${formatBRL(userTotal)}</span>
+              <div class="flex items-baseline justify-between mt-0.5">
+                <span class="font-display text-xl font-extrabold text-slate-900 tabular-nums">${formatBRL(userTotal)}</span>
+                <span class="text-[11px] font-semibold text-indigo-600 flex items-center gap-0.5">
+                  <span>Ver itens</span>
+                  <i data-lucide="chevron-right" class="w-3 h-3"></i>
+                </span>
+              </div>
             </div>
 
             ${!isAdmin && userTotal > 0 ? `
               <button
                 type="button"
-                onclick="copyWhatsAppBilling('${u.id}')"
+                onclick="event.stopPropagation(); copyWhatsAppBilling('${u.id}')"
                 class="w-full py-2 px-3 ${isOverdue ? 'bg-rose-600 hover:bg-rose-700' : 'bg-slate-900 hover:bg-slate-800'} text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition"
               >
                 <i data-lucide="message-circle" class="w-3.5 h-3.5 ${isOverdue ? 'text-white' : 'text-emerald-400'}"></i>
                 <span>${isOverdue ? 'Cobrar Vencido (WhatsApp)' : 'Cobrar WhatsApp'}</span>
               </button>
-            ` : `<div class="text-[11px] text-slate-400 text-center py-1">${isAdmin ? 'Titular dos cartões' : 'Sem saldo a cobrar'}</div>`}
+            ` : `<div class="text-[11px] text-slate-400 text-center py-1">${isAdmin ? 'Clique no card para ver seu extrato' : 'Sem saldo a cobrar'}</div>`}
           </div>
         `;
       }).join('');
@@ -2462,7 +3017,7 @@
         rawBody.innerHTML = `
           <tr>
             <td colspan="7" class="py-10 px-4 text-center text-xs sm:text-sm text-slate-400">
-              Nenhum lançamento cadastrado para ${formatMonthLabel(ym)}. Clique em "Importar Fatura (PDF / CSV)" ou "Lançar Compra Manual".
+              Nenhum lançamento cadastrado para ${formatMonthLabel(ym)}. Clique em "Importar Fatura (PDF / Print / CSV)" ou "Lançar Compra Manual".
             </td>
           </tr>
         `;
@@ -2472,6 +3027,7 @@
       rawBody.innerHTML = monthItems.map(it => {
         const isRefund = it.monthlyTotal < 0;
         const isCustom = it.splitType === 'CUSTOM';
+        const mapsUrl = buildFlorianopolisMapsUrl(it.description);
         const badges = (it.participants || []).map(pid => {
           const u = state.users.find(x => x.id === pid);
           const name = u ? u.name : pid;
@@ -2487,6 +3043,10 @@
             <td class="py-3 px-4 font-semibold ${isRefund ? 'text-cyan-950' : 'text-slate-900'}">
               <div class="flex items-center gap-2 flex-wrap">
                 <span>${it.description}</span>
+                <a href="${mapsUrl}" target="_blank" rel="noopener noreferrer" title="Abrir no Google Maps (Grande Florianópolis)" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 text-[10px] font-bold">
+                  <i data-lucide="map-pin" class="w-3 h-3"></i>
+                  <span>Maps</span>
+                </a>
                 ${isRefund ? '<span class="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full bg-cyan-100 text-cyan-800 border border-cyan-300">Reembolso</span>' : ''}
               </div>
             </td>
@@ -2513,17 +3073,124 @@
       }).join('');
     }
 
+    // ---------------------------------------------------------
+    // MODAL DE EXTRATO DETALHADO DE CADA PARTICIPANTE (ADMIN)
+    // ---------------------------------------------------------
+    function openAdminUserDetailModal(userId) {
+      const user = state.users.find(u => u.id === userId);
+      if (!user) return;
+
+      const ym = state.selectedMonth;
+      const monthItems = getItemsForMonth(ym, state.selectedCard)
+        .filter(it => it.participants && it.participants.includes(user.id));
+
+      const totalShare = monthItems.reduce((s, it) => s + getUserShareForExpense(it, user.id), 0);
+      const isPaid = !!state.payments[`${ym}_${user.id}`];
+      const dueInfo = getDueDateStatus(ym, isPaid, totalShare > 0);
+
+      const avatarEl = document.getElementById('admin-detail-avatar');
+      avatarEl.className = `w-9 h-9 rounded-full ${user.bg} ${user.text} flex items-center justify-center font-bold text-xs overflow-hidden shrink-0`;
+      avatarEl.innerHTML = renderUserAvatarInner(user);
+
+      document.getElementById('admin-detail-title').textContent = `Planilha Individual — ${user.name}`;
+      document.getElementById('admin-detail-subtitle').textContent = `${formatMonthLabel(ym)} • ${state.selectedCard === 'ALL' ? 'Todos os Cartões' : state.selectedCard}`;
+
+      const excelBtn = document.getElementById('admin-detail-excel-btn');
+      if (excelBtn) {
+        excelBtn.onclick = () => exportUserExcel(user.id);
+      }
+
+      document.getElementById('admin-detail-summary-bar').innerHTML = `
+        <div class="p-3.5 rounded-2xl bg-slate-50 border border-slate-200">
+          <span class="text-[11px] font-bold uppercase tracking-wider text-slate-500 block">Total do Participante</span>
+          <span class="font-display text-xl font-extrabold text-slate-900 tabular-nums">${formatBRL(totalShare)}</span>
+        </div>
+        <div class="p-3.5 rounded-2xl bg-slate-50 border border-slate-200">
+          <span class="text-[11px] font-bold uppercase tracking-wider text-slate-500 block">Status & Vencimento</span>
+          <span class="font-display text-sm font-extrabold ${dueInfo.state === 'PAID' ? 'text-emerald-600' : (dueInfo.state === 'OVERDUE' ? 'text-rose-600' : 'text-slate-900')}">${dueInfo.title}</span>
+          <span class="text-[11px] text-slate-500 block">${dueInfo.subtitle}</span>
+        </div>
+        <div class="p-3.5 rounded-2xl bg-slate-50 border border-slate-200">
+          <span class="text-[11px] font-bold uppercase tracking-wider text-slate-500 block">Qtd. de Lançamentos</span>
+          <span class="font-display text-xl font-extrabold text-slate-900 tabular-nums">${monthItems.length} item(ns)</span>
+        </div>
+      `;
+
+      const tbody = document.getElementById('admin-detail-table-body');
+      const tfoot = document.getElementById('admin-detail-table-foot');
+
+      if (monthItems.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="7" class="py-10 px-4 text-center text-xs text-slate-400">
+              ${user.name} não possui gastos lançados em ${formatMonthLabel(ym)}.
+            </td>
+          </tr>
+        `;
+        tfoot.innerHTML = '';
+      } else {
+        tbody.innerHTML = monthItems.map(it => {
+          const share = getUserShareForExpense(it, user.id);
+          const isRefund = it.monthlyTotal < 0 || share < 0;
+          const isCustom = it.splitType === 'CUSTOM';
+          const pctShare = it.monthlyTotal !== 0 ? Math.round((share / it.monthlyTotal) * 100) : 0;
+
+          return `
+            <tr class="${isRefund ? 'bg-cyan-50/50' : 'hover:bg-slate-50'}">
+              <td class="py-2.5 px-4 text-xs font-semibold text-slate-600 whitespace-nowrap">${formatDateBR(it.date)}</td>
+              <td class="py-2.5 px-4 font-semibold text-slate-900">${it.description}</td>
+              <td class="py-2.5 px-4 text-xs text-slate-600 whitespace-nowrap">${it.card}</td>
+              <td class="py-2.5 px-4 text-center text-xs font-bold">${it.totalInstallments > 1 ? `${it.currentInstallment}/${it.totalInstallments}` : '1x'}</td>
+              <td class="py-2.5 px-4 text-right text-xs text-slate-600 tabular-nums">${formatBRL(it.monthlyTotal)}</td>
+              <td class="py-2.5 px-4 text-center text-xs">${isCustom ? `Acordado (${pctShare}%)` : `1/${it.participants.length} igual`}</td>
+              <td class="py-2.5 px-4 text-right font-extrabold ${isRefund ? 'text-cyan-700 bg-cyan-100/50' : 'text-emerald-800 bg-emerald-50/50'} tabular-nums">${formatBRL(share)}</td>
+            </tr>
+          `;
+        }).join('');
+
+        tfoot.innerHTML = `
+          <tr>
+            <td colspan="6" class="py-3 px-4 text-right text-xs uppercase tracking-wider text-slate-300">Total de ${user.name}</td>
+            <td class="py-3 px-4 text-right text-base text-emerald-400 tabular-nums">${formatBRL(totalShare)}</td>
+          </tr>
+        `;
+      }
+
+      document.getElementById('admin-user-detail-modal').classList.remove('hidden');
+      refreshIcons();
+    }
+
+    function closeAdminUserDetailModal() {
+      document.getElementById('admin-user-detail-modal').classList.add('hidden');
+    }
+
+    // ---------------------------------------------------------
+    // CONFERÊNCIA DO VALOR DA FATURA ORIGINAL (COM VÍRGULA)
+    // ---------------------------------------------------------
     function handleAdminPdfTargetChange(val) {
       const ym = state.selectedMonth;
-      if (val === '' || val === null) {
+      const trimmed = String(val || '').trim();
+      if (!trimmed) {
         delete state.pdfTargets[ym];
       } else {
-        state.pdfTargets[ym] = parseFloat(val);
+        const parsed = parseFlexibleCurrency(trimmed);
+        if (!isNaN(parsed)) {
+          state.pdfTargets[ym] = parsed;
+        }
       }
-      saveAllData();
+      saveAllData(false);
       const monthItems = getItemsForMonth(ym, state.selectedCard);
       const rawTotal = monthItems.reduce((s, it) => s + it.monthlyTotal, 0);
       updateAdminPdfDiffBadge(rawTotal, state.pdfTargets[ym]);
+    }
+
+    function formatAdminPdfTargetBlur() {
+      const ym = state.selectedMonth;
+      const targetInput = document.getElementById('admin-pdf-target-input');
+      const saved = state.pdfTargets[ym];
+      if (targetInput && saved !== undefined && !isNaN(saved)) {
+        targetInput.value = Number(saved).toFixed(2).replace('.', ',');
+      }
     }
 
     function updateAdminPdfDiffBadge(systemNet, pdfTarget) {
@@ -2537,7 +3204,7 @@
       const diff = Number((systemNet - pdfTarget).toFixed(2));
       if (Math.abs(diff) <= 0.02) {
         badge.className = 'text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30';
-        badge.textContent = 'Bateu 100% com o PDF ✓';
+        badge.textContent = 'Bateu 100% ✓';
       } else if (diff < 0) {
         badge.className = 'text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-400/30';
         badge.textContent = `Falta ${formatBRL(Math.abs(diff))}`;
@@ -2550,7 +3217,7 @@
     function toggleUserPaymentStatus(userId) {
       const key = `${state.selectedMonth}_${userId}`;
       state.payments[key] = !state.payments[key];
-      saveAllData();
+      saveAllData(false);
       renderCurrentView();
       showToast(state.payments[key] ? 'Pagamento confirmado!' : 'Marcado como pendente.', 'success');
     }
@@ -2607,7 +3274,7 @@
     function confirmClearAllExpenses() {
       state.expenses = [];
       state.payments = {};
-      saveAllData();
+      saveAllData(true);
       closeConfirmClearModal();
       renderCurrentView();
       showToast('Todos os gastos foram zerados na nuvem!', 'success');
@@ -2893,7 +3560,7 @@
       preview.className = isNegative
         ? 'bg-cyan-50 border border-cyan-300 rounded-xl p-3 text-xs text-cyan-950'
         : 'bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-xs text-emerald-900';
-      preview.innerHTML = `${isNegative ? 'Desconto/Reembolso mensal' : 'Parcela mensal'}: <strong>${formatBRL(monthly)}</strong> (${inst}x) • Dividido para <strong>${count} pessoa(s)</strong> = <strong>${formatBRL(perPerson)}</strong> por pessoa/mês.`;
+      preview.innerHTML = `${isNegative ? 'Desconto/Reembolso mensal' : 'Parcela mensal'} de <strong>${formatBRL(monthly)}</strong> (${inst}x) • Dividido para <strong>${count} pessoa(s)</strong> = <strong>${formatBRL(perPerson)}</strong> por pessoa/mês.`;
     }
 
     function saveExpenseForm(e) {
@@ -2943,7 +3610,7 @@
         state.expenses.push(data);
       }
 
-      saveAllData();
+      saveAllData(true);
       closeExpenseModal();
       renderCurrentView();
       showToast('Compra salva na nuvem!', 'success');
@@ -2951,15 +3618,16 @@
 
     function deleteExpense(id) {
       state.expenses = state.expenses.filter(e => e.id !== id);
-      saveAllData();
+      saveAllData(true);
       renderCurrentView();
       showToast('Lançamento removido.', 'success');
     }
 
     // ---------------------------------------------------------
-    // IMPORTADOR DE FATURA (PDF / CSV) & ASSISTENTE
+    // IMPORTADOR DE FATURA (PDF / IMAGEM PRINT OCR / CSV)
     // ---------------------------------------------------------
     function openImportWizardModal() {
+      pendingUploadedInvoiceFile = null;
       document.getElementById('import-step-1').classList.remove('hidden');
       document.getElementById('import-step-2').classList.add('hidden');
       document.getElementById('pdf-reading-status').classList.add('hidden');
@@ -3007,7 +3675,7 @@
           } else {
             remInst = parseInt(parcRaw, 10) || 1;
           }
-          const totalVal = parseFloat(parts[4].replace(/R\$/gi, '').replace(/\./g, '').replace(',', '.').trim());
+          const totalVal = parseFlexibleCurrency(parts[4]);
           if (!isNaN(totalVal) && totalVal !== 0) {
             const monthVal = totalVal / remInst;
             count++;
@@ -3052,10 +3720,73 @@
       processUploadedInvoiceFile(file);
     }
 
+    function captureFileForEmillynDownload(file) {
+      if (!file) return;
+      // Limite seguro (~720 KB) para caber no documento único do Firestore
+      if (file.size > 720 * 1024) {
+        showToast('Aviso: arquivo maior que 720 KB não pôde ser anexado ao download da Emillyn (limite do banco).', 'error');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        pendingUploadedInvoiceFile = {
+          fileName: file.name,
+          mimeType: file.type || 'application/octet-stream',
+          dataUrl: e.target.result,
+          uploadedAt: Date.now()
+        };
+      };
+      reader.readAsDataURL(file);
+    }
+
     async function processUploadedInvoiceFile(file) {
       const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+      const isImage = file.type.startsWith('image/') || /\.(png|jpe?g|webp)$/i.test(file.name);
       const statusBadge = document.getElementById('pdf-reading-status');
       const statusText = document.getElementById('pdf-reading-text');
+
+      captureFileForEmillynDownload(file);
+
+      if (isImage) {
+        if (!window.Tesseract) {
+          showToast('Leitor de imagem (OCR) ainda carregando. Tente novamente em instantes.', 'error');
+          return;
+        }
+        try {
+          statusBadge.classList.remove('hidden');
+          statusText.textContent = 'Lendo texto do print (OCR)...';
+
+          const workerResult = await window.Tesseract.recognize(file, 'por', {
+            logger: m => {
+              if (m.status === 'recognizing text') {
+                statusText.textContent = `Lendo print: ${Math.round((m.progress || 0) * 100)}%...`;
+              }
+            }
+          });
+
+          const rawText = (workerResult?.data?.text || '').trim();
+          const rawLines = rawText.split('\n').map(l => l.trim()).filter(Boolean);
+
+          document.getElementById('import-raw-pdf-dump').value = rawText;
+          document.getElementById('toggle-raw-pdf-btn').classList.remove('hidden');
+
+          const parsedLines = extractTransactionsFromPdfLines(rawLines, true);
+          statusBadge.classList.add('hidden');
+
+          if (parsedLines.length > 0) {
+            document.getElementById('import-raw-textarea').value = parsedLines.join('\n');
+            updateImportPreviewSummary();
+            showToast(`${parsedLines.length} lançamento(s) identificado(s) no print!`, 'success');
+          } else {
+            document.getElementById('import-raw-pdf-dump').classList.remove('hidden');
+            showToast('Print lido, mas confira o texto bruto abaixo para ajustar o formato.', 'error');
+          }
+        } catch (err) {
+          statusBadge.classList.add('hidden');
+          showToast('Não foi possível ler o texto deste print. Tente uma imagem mais nítida.', 'error');
+        }
+        return;
+      }
 
       if (!isPdf) {
         const reader = new FileReader();
@@ -3108,7 +3839,7 @@
         document.getElementById('import-raw-pdf-dump').value = rawDump;
         document.getElementById('toggle-raw-pdf-btn').classList.remove('hidden');
 
-        const parsedLines = extractTransactionsFromPdfLines(fullExtractedLines);
+        const parsedLines = extractTransactionsFromPdfLines(fullExtractedLines, false);
         statusBadge.classList.add('hidden');
 
         if (parsedLines.length > 0) {
@@ -3130,7 +3861,7 @@
       dump.classList.toggle('hidden');
     }
 
-    function extractTransactionsFromPdfLines(lines) {
+    function extractTransactionsFromPdfLines(lines, isImageOcr = false) {
       const refYear = document.getElementById('import-year-select')?.value || '2026';
       const defaultCardNum = document.getElementById('import-card-select').value === 'Cartão 2' ? 'Cartão 2' : 'Cartão 1';
       const monthNames = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
@@ -3148,7 +3879,7 @@
       const installmentRegex = /(?:[-–—]?\s*PARCELA\s+|PARC\s*)?(\d{1,2})\s*\/\s*(\d{1,2})/i;
 
       let currentSectionOwner = '';
-      let inTransactionsSection = false;
+      let inTransactionsSection = isImageOcr;
 
       lines.forEach(rawLine => {
         const pageMatch = rawLine.match(/^__PAGE_(\d+)__\s*(.*)$/);
@@ -3156,7 +3887,7 @@
         const line = pageMatch ? pageMatch[2].trim() : rawLine.trim();
         const upper = line.toUpperCase();
 
-        if (pageNum >= 3 || upper.includes('TRANSAÇÕES DE')) {
+        if (!isImageOcr && (pageNum >= 3 || upper.includes('TRANSAÇÕES DE'))) {
           inTransactionsSection = true;
         }
         if (!inTransactionsSection) return;
@@ -3235,7 +3966,7 @@
     function startInteractiveDivisionWizard() {
       const raw = document.getElementById('import-raw-textarea').value.trim();
       if (!raw) {
-        showToast('Cole os lançamentos ou anexe um arquivo PDF/CSV primeiro.', 'error');
+        showToast('Cole os lançamentos ou anexe um arquivo PDF/Print/CSV primeiro.', 'error');
         return;
       }
 
@@ -3261,7 +3992,7 @@
           } else {
             installments = parseInt(parcRaw, 10) || 1;
           }
-          const amount = parseFloat(parts[4].replace(/R\$/gi, '').replace(/\./g, '').replace(',', '.').trim());
+          const amount = parseFlexibleCurrency(parts[4]);
 
           const suggestedUser = state.users.find(u =>
             u.role !== 'ADMIN' && description.toLowerCase().includes(`(${u.name.toLowerCase()})`)
@@ -3280,7 +4011,7 @@
           }
         } else if (parts.length >= 3) {
           const isoDate = parsePlanilhaDate(parts[0], refYear);
-          const amount = parseFloat(parts[2].replace(/R\$/gi, '').replace(/\./g, '').replace(',', '.').trim());
+          const amount = parseFlexibleCurrency(parts[2]);
           const installments = parseInt((parts[3] || '1').replace(/\D/g, ''), 10) || 1;
           if (!isNaN(amount) && amount !== 0) {
             queue.push({ date: isoDate, description: parts[1], totalAmount: amount, installments, card: fallbackCard, suggestedParticipants: null });
@@ -3562,7 +4293,7 @@
       summary.className = isNegative
         ? 'mt-3 bg-cyan-50 border border-cyan-300 rounded-xl p-3 text-xs text-cyan-950'
         : 'mt-3 bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-xs text-emerald-900';
-      summary.innerHTML = `${isNegative ? 'Reembolso/Desconto mensal' : 'Parcela mensal'} de <strong>${formatBRL(monthly)}</strong> dividida entre <strong>${checked.length} pessoa(s)</strong> = <strong>${formatBRL(perPerson)}</strong> por pessoa.`;
+      summary.innerHTML = `${isNegative ? 'Reembolso/Desconto mensal' : 'Parcela mensal'} de <strong>${formatBRL(monthly)}</strong> dividida entre <strong>${checked.length} pessoa(s)</strong> = <strong>${formatBRL(perPerson)}</strong> para cada.`;
     }
 
     function wizardConfirmItem() {
@@ -3598,49 +4329,60 @@
         splitType,
         customSplits
       };
-      advanceWizard();
+      advanceWizardOrFinish();
     }
 
     function wizardSkipItem() {
       state.wizardDecisions[state.wizardIndex] = { skipped: true };
-      advanceWizard();
+      advanceWizardOrFinish();
     }
 
-    function advanceWizard() {
+    function advanceWizardOrFinish() {
       state.wizardIndex++;
-      if (state.wizardIndex >= state.wizardQueue.length) {
-        let importedCount = 0;
+      if (state.wizardIndex < state.wizardQueue.length) {
+        renderWizardCurrentItem();
+      } else {
+        let addedCount = 0;
         let firstImportedMonth = null;
-
         state.wizardQueue.forEach((item, idx) => {
-          const decision = state.wizardDecisions[idx];
-          if (decision && !decision.skipped && decision.participants && decision.participants.length > 0) {
+          const dec = state.wizardDecisions[idx];
+          if (dec && !dec.skipped && dec.participants && dec.participants.length > 0) {
+            if (!firstImportedMonth && item.date) {
+              firstImportedMonth = item.date.slice(0, 7);
+            }
             state.expenses.push({
-              id: 'exp-' + Date.now() + '-' + idx,
-              ...item,
-              participants: decision.participants,
-              splitType: decision.splitType,
-              customSplits: decision.customSplits
+              id: 'exp-imp-' + Date.now() + '-' + idx,
+              date: item.date,
+              card: item.card,
+              description: item.description,
+              totalAmount: item.totalAmount,
+              installments: item.installments,
+              participants: dec.participants,
+              splitType: dec.splitType || 'EQUAL',
+              customSplits: dec.customSplits || null
             });
-            importedCount++;
-            if (!firstImportedMonth) firstImportedMonth = item.date.slice(0, 7);
+            addedCount++;
           }
         });
 
-        if (firstImportedMonth) {
-          state.selectedMonth = firstImportedMonth;
+        // Se o admin anexou um PDF ou imagem nesta importação, salva para download exclusivo da Emillyn
+        const targetMonthForFile = firstImportedMonth || state.selectedMonth;
+        if (pendingUploadedInvoiceFile) {
+          state.invoiceFiles[targetMonthForFile] = pendingUploadedInvoiceFile;
+          pendingUploadedInvoiceFile = null;
         }
-        saveAllData();
+
+        saveAllData(addedCount > 0);
         closeImportModal();
+        document.getElementById('import-raw-textarea').value = '';
+        updateImportPreviewSummary();
         renderCurrentView();
-        showToast(`${importedCount} lançamento(s) importado(s) e sincronizado(s) na nuvem!`, 'success');
-      } else {
-        renderWizardCurrentItem();
+        showToast(`${addedCount} compra(s) importada(s) e sincronizada(s) na nuvem!`, 'success');
       }
     }
 
     // ---------------------------------------------------------
-    // CONTROLE DE PARTICIPANTES, AGREGADOS & PINS (ADMIN)
+    // MODAL 3: GERENCIAR PARTICIPANTES, AGREGADOS & PINS
     // ---------------------------------------------------------
     function openManagePeopleModal() {
       renderPeopleListModal();
@@ -3652,224 +4394,158 @@
       document.getElementById('people-modal').classList.add('hidden');
     }
 
-    function toggleRevealUserPin(userId) {
-      revealedPinsMap[userId] = !revealedPinsMap[userId];
-      renderPeopleListModal();
-      refreshIcons();
-    }
-
-    function adminResetUserPin(userId) {
-      const idx = state.users.findIndex(u => u.id === userId);
-      if (idx === -1) return;
-
-      if (state.users[idx].role === 'ADMIN') {
-        showToast('Para alterar o PIN do Administrador, use o botão "PIN" no topo.', 'error');
-        return;
-      }
-
-      state.users[idx].pin = '';
-      state.users[idx].pinConfigured = false;
-      revealedPinsMap[userId] = false;
-      saveAllData();
-      renderPeopleListModal();
-      refreshIcons();
-      showToast(`PIN de ${state.users[idx].name} resetado! No próximo login deverá criar um novo.`, 'success');
-    }
-
-    function adminToggleBlockUser(userId) {
-      const idx = state.users.findIndex(u => u.id === userId);
-      if (idx === -1 || state.users[idx].role === 'ADMIN') return;
-
-      state.users[idx].blocked = !state.users[idx].blocked;
-      saveAllData();
-      renderPeopleListModal();
-      refreshIcons();
-      showToast(
-        state.users[idx].blocked
-          ? `Acesso de ${state.users[idx].name} bloqueado.`
-          : `Acesso de ${state.users[idx].name} desbloqueado!`,
-        'success'
-      );
-    }
-
-    function adminEditUserName(userId) {
-      const idx = state.users.findIndex(u => u.id === userId);
-      if (idx === -1) return;
-      const input = document.getElementById(`edit-name-${userId}`);
-      if (!input) return;
-      const newName = input.value.trim();
-      if (!newName) return;
-
-      state.users[idx].name = newName;
-      saveAllData();
-      renderPeopleListModal();
-      renderCurrentView();
-      refreshIcons();
-      showToast('Nome atualizado com sucesso!', 'success');
-    }
-
     function renderPeopleListModal() {
       const container = document.getElementById('people-list-container');
       container.innerHTML = state.users.map(u => {
         const isAdmin = u.role === 'ADMIN';
         const isRevealed = !!revealedPinsMap[u.id];
-        const pinDisplay = !u.pinConfigured
-          ? '<span class="text-amber-700 font-bold">Aguardando 1º Acesso</span>'
-          : (isRevealed ? `<span class="font-mono font-extrabold text-slate-900">${u.pin}</span>` : '<span class="font-mono text-slate-500">••••</span>');
+        const statusBadge = u.blocked
+          ? `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-800">Bloqueado</span>`
+          : (u.pinConfigured
+              ? `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">PIN Ativo</span>`
+              : `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">Aguardando 1º Acesso</span>`);
 
         return `
-          <div class="p-3.5 rounded-2xl border ${u.blocked ? 'border-rose-200 bg-rose-50/40' : 'border-slate-200 bg-white'} space-y-2.5">
-            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <div class="flex items-center gap-2.5 flex-1">
-                <span class="w-9 h-9 rounded-full ${u.bg} ${u.text} flex items-center justify-center font-bold text-xs shrink-0 overflow-hidden">
-                  ${renderUserAvatarInner(u)}
-                </span>
-                <div class="flex-1 min-w-0">
-                  <div class="flex items-center gap-1.5">
-                    <input
-                      type="text"
-                      id="edit-name-${u.id}"
-                      value="${u.name}"
-                      onchange="adminEditUserName('${u.id}')"
-                      class="text-xs font-bold text-slate-900 bg-transparent border-b border-transparent hover:border-slate-300 focus:border-emerald-500 focus:outline-none px-0.5 py-0.5 max-w-[160px]"
-                      title="Clique para editar o nome"
-                    />
-                    <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full ${isAdmin ? 'bg-purple-100 text-purple-800' : (u.isCore ? 'bg-slate-100 text-slate-600' : 'bg-indigo-50 text-indigo-700')}">
-                      ${isAdmin ? 'Admin' : (u.isCore ? 'Fixo' : 'Agregado')}
-                    </span>
-                    ${u.blocked ? `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-700">Bloqueado</span>` : ''}
-                  </div>
-                  <div class="flex items-center gap-2 mt-1 text-[11px] text-slate-500">
-                    <span>PIN: ${pinDisplay}</span>
-                    ${u.pinConfigured ? `
-                      <button type="button" onclick="toggleRevealUserPin('${u.id}')" class="text-slate-400 hover:text-slate-700" title="${isRevealed ? 'Ocultar PIN' : 'Ver PIN'}">
-                        <i data-lucide="${isRevealed ? 'eye-off' : 'eye'}" class="w-3.5 h-3.5"></i>
-                      </button>
-                    ` : ''}
-                  </div>
+          <div class="p-3.5 rounded-2xl border ${u.blocked ? 'border-rose-200 bg-rose-50/40' : 'border-slate-200 bg-white'} flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div class="flex items-center gap-3">
+              <span class="w-9 h-9 rounded-full ${u.bg} ${u.text} flex items-center justify-center font-bold text-xs shrink-0 overflow-hidden">${renderUserAvatarInner(u)}</span>
+              <div>
+                <div class="flex flex-wrap items-center gap-1.5">
+                  <p class="text-sm font-bold text-slate-900">${u.name}</p>
+                  ${statusBadge}
+                </div>
+                <div class="flex items-center gap-2 mt-1 text-xs text-slate-500">
+                  <span>${isAdmin ? 'Administrador' : (u.isCore ? 'Fixo do Grupo' : 'Agregado')}</span>
+                  <span>•</span>
+                  <span>PIN: <strong class="font-mono text-slate-800">${u.pinConfigured ? (isRevealed ? u.pin : '••••') : 'Não criado'}</strong></span>
+                  ${u.pinConfigured ? `
+                    <button type="button" onclick="toggleRevealUserPin('${u.id}')" class="text-[11px] font-semibold text-indigo-600 hover:underline">
+                      ${isRevealed ? 'Ocultar' : 'Ver PIN'}
+                    </button>
+                  ` : ''}
                 </div>
               </div>
+            </div>
 
-              <div class="flex items-center gap-1.5 flex-wrap">
-                ${!isAdmin ? `
-                  <button
-                    type="button"
-                    onclick="adminResetUserPin('${u.id}')"
-                    class="px-2.5 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 text-[11px] font-bold flex items-center gap-1 transition"
-                    title="Limpar PIN atual e exigir novo cadastro no próximo login"
-                  >
-                    <i data-lucide="rotate-ccw" class="w-3 h-3"></i>
-                    <span>Resetar PIN</span>
-                  </button>
-                  <button
-                    type="button"
-                    onclick="adminToggleBlockUser('${u.id}')"
-                    class="px-2.5 py-1.5 rounded-xl ${u.blocked ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-700 border-slate-200'} border text-[11px] font-bold transition"
-                  >
-                    ${u.blocked ? 'Desbloquear' : 'Bloquear'}
-                  </button>
-                ` : `
-                  <button
-                    type="button"
-                    onclick="closePeopleModal(); openChangeMyPinModal();"
-                    class="px-2.5 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-[11px] font-bold"
-                  >
-                    Alterar PIN Admin
-                  </button>
-                `}
-
-                ${!u.isCore && !isAdmin ? `
-                  <button
-                    type="button"
-                    onclick="removeAggregate('${u.id}')"
-                    class="p-1.5 rounded-xl text-rose-600 hover:bg-rose-50"
-                    title="Remover Agregado"
-                  >
-                    <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+            <div class="flex flex-wrap items-center gap-1.5">
+              ${u.pinConfigured ? `
+                <button type="button" onclick="adminResetUserPin('${u.id}')" class="text-[11px] font-semibold px-2.5 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 transition">
+                  Resetar PIN
+                </button>
+              ` : ''}
+              ${!isAdmin ? `
+                <button type="button" onclick="adminToggleBlockUser('${u.id}')" class="text-[11px] font-semibold px-2.5 py-1.5 rounded-xl ${u.blocked ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-700 border-slate-200'} border hover:opacity-80 transition">
+                  ${u.blocked ? 'Desbloquear' : 'Bloquear'}
+                </button>
+                ${!u.isCore ? `
+                  <button type="button" onclick="removeAggregate('${u.id}')" class="text-[11px] font-semibold px-2.5 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 transition">
+                    Remover
                   </button>
                 ` : ''}
-              </div>
+              ` : ''}
             </div>
           </div>
         `;
       }).join('');
     }
 
+    function toggleRevealUserPin(userId) {
+      revealedPinsMap[userId] = !revealedPinsMap[userId];
+      renderPeopleListModal();
+    }
+
+    function adminResetUserPin(userId) {
+      const idx = state.users.findIndex(u => u.id === userId);
+      if (idx === -1) return;
+      state.users[idx].pin = '';
+      state.users[idx].pinConfigured = false;
+      delete revealedPinsMap[userId];
+      saveAllData(false);
+      renderPeopleListModal();
+      showToast(`PIN de ${state.users[idx].name} resetado! No próximo login, ele(a) criará uma nova senha.`, 'success');
+    }
+
+    function adminToggleBlockUser(userId) {
+      const idx = state.users.findIndex(u => u.id === userId);
+      if (idx === -1 || state.users[idx].role === 'ADMIN') return;
+      state.users[idx].blocked = !state.users[idx].blocked;
+      saveAllData(false);
+      renderPeopleListModal();
+      showToast(state.users[idx].blocked ? `Acesso de ${state.users[idx].name} bloqueado.` : `Acesso de ${state.users[idx].name} liberado!`, 'success');
+    }
+
     function addNewAggregate(e) {
       e.preventDefault();
-      const nameInput = document.getElementById('new-agg-name');
-      const typeSelect = document.getElementById('new-agg-type');
-      const colorSelect = document.getElementById('new-agg-color');
-      const rawName = nameInput.value.trim();
-
+      const rawName = document.getElementById('new-agg-name').value.trim();
+      const userType = document.getElementById('new-agg-type').value;
+      const colorName = document.getElementById('new-agg-color').value;
       if (!rawName) return;
 
-      const isCore = typeSelect.value === 'CORE';
-      const colorKey = colorSelect.value || 'slate';
-      const palette = COLOR_PALETTES[colorKey] || COLOR_PALETTES.slate;
+      if (findUserByTypedName(rawName)) {
+        showToast('Já existe um participante cadastrado com este nome.', 'error');
+        return;
+      }
 
-      const displayName = (!isCore && !rawName.toLowerCase().includes('agregado'))
-        ? `${rawName} (Agregado)`
-        : rawName;
+      const isCore = userType === 'CORE';
+      const displayName = isCore ? rawName : (rawName.toLowerCase().includes('agregado') ? rawName : `${rawName} (Agregado)`);
+      const palette = COLOR_PALETTES[colorName] || COLOR_PALETTES.slate;
+      const newId = 'user_' + Date.now();
 
-      const newUser = {
-        id: 'user-' + Date.now(),
+      state.users.push({
+        id: newId,
         name: displayName,
         role: 'MEMBER',
         isCore,
         pin: '',
         pinConfigured: false,
         blocked: false,
-        colorName: colorKey,
+        colorName,
         bg: palette.bg,
         text: palette.text,
         border: palette.border,
         hex: palette.hex
-      };
+      });
 
-      state.users.push(newUser);
-      saveAllData();
-      nameInput.value = '';
+      saveAllData(false);
+      document.getElementById('new-agg-name').value = '';
       renderPeopleListModal();
       renderCurrentView();
-      refreshIcons();
-      showToast(`${newUser.name} cadastrado na nuvem! Ele criará o próprio PIN no primeiro acesso.`, 'success');
+      showToast(`${displayName} cadastrado na nuvem! No 1º acesso, ele(a) criará o próprio PIN.`, 'success');
     }
 
     function removeAggregate(id) {
+      const target = state.users.find(u => u.id === id);
+      if (!target || target.isCore || target.role === 'ADMIN') return;
+
       state.users = state.users.filter(u => u.id !== id);
-      saveAllData();
+      state.expenses.forEach(exp => {
+        exp.participants = (exp.participants || []).filter(pid => pid !== id);
+      });
+      saveAllData(true);
       renderPeopleListModal();
       renderCurrentView();
-      refreshIcons();
-      showToast('Agregado removido.', 'success');
+      showToast(`${target.name} removido da lista.`, 'success');
     }
 
     // ---------------------------------------------------------
-    // TOAST FEEDBACK VISUAL
+    // NOTIFICAÇÕES (TOASTS)
     // ---------------------------------------------------------
     function showToast(message, type = 'success') {
       const container = document.getElementById('toast-container');
       const toast = document.createElement('div');
       const bg = type === 'error' ? 'bg-rose-600' : 'bg-slate-900';
       toast.className = `${bg} text-white text-xs font-semibold px-4 py-3 rounded-xl shadow-lg flex items-center gap-2 pointer-events-auto transition-all duration-300`;
-      toast.innerHTML = `
-        <span class="w-2 h-2 rounded-full ${type === 'error' ? 'bg-white' : 'bg-emerald-400'}"></span>
-        <span>${message}</span>
-      `;
+      toast.innerHTML = `<span class="w-2 h-2 rounded-full ${type === 'error' ? 'bg-white' : 'bg-emerald-400'}"></span><span>${message}</span>`;
       container.appendChild(toast);
-
       setTimeout(() => {
         toast.style.opacity = '0';
         setTimeout(() => toast.remove(), 300);
       }, 3200);
     }
 
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', initApp);
-    } else {
-      initApp();
-    }
+    window.addEventListener('DOMContentLoaded', initApp);
   </script>
 </body>
 </html>
+
+```
